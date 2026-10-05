@@ -28,7 +28,7 @@ from asset_engine.rollups.rules import DEAD_ZONE_MM, check, errors
 
 ## The previews are a quarter of the print resolution: enough to judge the layout on a screen.
 PREVIEW_SCALE = 4
-## The eye-level band drawn on the guides (J-A-B hook band; DIN 32975 reading height 100-160 cm).
+## The eye-level band drawn on the guides: J-A-B's hook band, where the headline goes.
 EYE_BAND_MM = (1300, 1700)
 
 

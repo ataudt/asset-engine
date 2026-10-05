@@ -16,6 +16,9 @@ Rules:
       WCAG     https://www.w3.org/TR/WCAG21/#contrast-minimum
       Denso    https://www.qrcode.com/en/howto/code.html
       Flyeral. https://www.flyeralarm.com/blog/wp-content/uploads/Flyeralarm_Checkliste_Druckdatenerstellung-1.pdf
+      PullUp   https://pullupstand.com/blogs/blog/pop-up-banner-design-guide-canva-photoshop-tips
+      Dubai    https://printerydubai.com/effective-roll-up-banner-design/
+      designen https://www.designenlassen.de (roll-up guide; cited by the research, not re-read)
 """
 
 from __future__ import annotations
@@ -35,7 +38,7 @@ DEAD_ZONE_MM = 500
 ## Where the logo is looked for: the top band (J-A-B identity band 1700-2000 mm).
 LOGO_FLOOR_MM = 1700
 ## A code is scanned comfortably between hip and chest height (J-A-B action band from 500 mm;
-## PullUpStand: 1-1.5 m). The centre should land in this range.
+## PullUp: 1-1.5 m). The centre should land in this range.
 QR_CENTER_MM = (600, 1500)
 ## One glance, one message: 3-7 words of headline, under ~35 in all (J-A-B; Loesch).
 HEADLINE_MAX_WORDS = 7
@@ -45,14 +48,15 @@ TOTAL_MAX_WORDS = 35
 CAP_MM_PER_METRE = 10
 ## Running text: x-height = reading distance / 250 (DIN 1450 comfort formula, via b&b).
 X_HEIGHT_DIVISOR = 250
-## A code is read from about ten times its width; 80-100 mm for people walking by (J-A-B). The
-## quiet zone is the card's own margin (Denso: four modules).
+## A code is read from about ten times its width; 80-100 mm for people walking by (J-A-B). That is
+## the code's own modules: the card's margin is its quiet zone (Denso: four modules) and does not
+## count.
 QR_MIN_MM = 80
 ## Contrast of type against its ground (WCAG 2.1 AA: 4.5:1, 3:1 for large text). A headline on a
 ## roll-up is large by any measure; the smaller roles are held to the stricter figure.
 CONTRAST_HEADLINE = 3.0
 CONTRAST_TEXT = 4.5
-## At most two typeface families (Printery Dubai; designenlassen; marconomy).
+## At most two typeface families (Dubai; designen; marcon.).
 MAX_FAMILIES = 2
 ## Pictures below this print visibly soft even at a few metres; large format asks 100-150 dpi
 ## (Flyeralarm), and roll-up shops accept down to about 72-100.
@@ -139,9 +143,15 @@ def check(config: RollupConfig, drawn: list[Drawn]) -> list[Finding]:
             if x_mm < need:
                 add(ERROR, item, f"x-height {x_mm:.1f} mm; read from {config.reading_distance_m} m it needs {need:.1f} mm")
         floor = CONTRAST_HEADLINE if item.role == "headline" else CONTRAST_TEXT
-        ratio = contrast(item.color, item.ground)
+        ## Against whichever end of the ground is nearer the type's own colour: the worst place a
+        ## letter can sit, not the average one.
+        ratio = min(contrast(item.color, extreme) for extreme in item.ground)
         if ratio < floor:
-            add(ERROR, item, f"contrast {ratio:.1f}:1 against its ground {item.ground}; it needs {floor}:1")
+            add(
+                ERROR,
+                item,
+                f"contrast {ratio:.1f}:1 against the lightest/darkest of its ground {item.ground}; it needs {floor}:1",
+            )
     if words > TOTAL_MAX_WORDS:
         add(ERROR, "copy", f"{words} words in all (the address not counted); a roll-up read in passing carries {TOTAL_MAX_WORDS}")
     if len(families) > MAX_FAMILIES:
@@ -149,9 +159,9 @@ def check(config: RollupConfig, drawn: list[Drawn]) -> list[Finding]:
 
     for item in drawn:
         if item.type == "qr":
-            width_mm = _mm(config, item.box[2] - item.box[0])
+            width_mm = _mm(config, item.code_px)
             if width_mm < QR_MIN_MM:
-                add(ERROR, item, f"{width_mm:.0f} mm wide; a code read at a stand needs {QR_MIN_MM} mm")
+                add(ERROR, item, f"the code is {width_mm:.0f} mm wide without its margin; read at a stand it needs {QR_MIN_MM} mm")
             center = _above_floor(config, (item.box[1] + item.box[3]) / 2)
             if not QR_CENTER_MM[0] <= center <= QR_CENTER_MM[1]:
                 add(WARNING, item, f"centre {center:.0f} mm above the floor; it scans best between {QR_CENTER_MM[0]} and {QR_CENTER_MM[1]} mm")

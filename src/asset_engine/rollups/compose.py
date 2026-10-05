@@ -5,8 +5,8 @@ Rules:
   - The elements are drawn in list order on the whole data format; the ground runs into the bleed
     and the hidden strips, because a shop's cut and a cassette's grip both have tolerance.
   - Every element reports what it drew (``Drawn``): its box, its words, the real cap and x-heights
-    of its face, its colour against the ground measured under it before it was drawn, and for a
-    photograph the resolution it actually prints at. ``rules`` judges the roll-up from these, not
+    of its face, the lightest and darkest of the ground under it measured before it was drawn, and
+    for a photograph the resolution it actually prints at. ``rules`` judges the roll-up from these, not
     from what the config meant.
   - Type that does not fit its band stops the build, as on the flyer: a clipped line on a two-metre
     banner is a reprint.
@@ -18,10 +18,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont, ImageStat
+from PIL import Image, ImageDraw, ImageFont
 
 from asset_engine.printing.elements import Box, background, layout_stack, paste_qr
 from asset_engine.printing.links import Campaign, campaign_links
+from asset_engine.printing.qr import module_size, qr_matrix
 from asset_engine.project import get_project
 from asset_engine.rollups.config import RollupConfig, RollupConfigError, read_copy
 from asset_engine.store.compose import apply_scrim, cover
@@ -58,9 +59,13 @@ class Drawn:
     x_height_px: int = 0
     family: str = ""
     color: tuple[int, int, int] | None = None
-    ## The mean colour of the canvas under the text box, measured before the text was drawn.
-    ground: tuple[int, int, int] | None = None
+    ## The lightest and the darkest of the canvas under the text box (its 99th and 1st luminance
+    ## percentile, as greys), measured before the text was drawn. Type has to hold against both: a
+    ## mean would let white type pass over a photo that is half white wall.
+    ground: tuple[tuple[int, int, int], tuple[int, int, int]] | None = None
     raster: Raster | None = None
+    ## The width of a QR code's modules alone, without the card's quiet zone around them.
+    code_px: int = 0
 
 
 @dataclass(frozen=True)
@@ -76,11 +81,29 @@ def _metrics(font: ImageFont.FreeTypeFont) -> tuple[int, int, str]:
     return cap, x_height, font.getname()[0]
 
 
-def _ground_under(canvas: Image.Image, box: Box) -> tuple[int, int, int]:
+## The share of the ground ignored at either end before its lightest and darkest are taken: a
+## speck of glare or a single dark pixel is not what the eye reads type against.
+GROUND_PERCENTILE = 0.01
+
+
+def _ground_under(canvas: Image.Image, box: Box) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+    """The lightest and darkest of the ground in ``box``, as greys of that luminance."""
     left, top, right, bottom = box
     region = canvas.crop((max(0, left), max(0, top), min(canvas.width, right), min(canvas.height, bottom)))
-    mean = ImageStat.Stat(region.convert("RGB")).mean
-    return (round(mean[0]), round(mean[1]), round(mean[2]))
+    histogram = region.convert("L").histogram()
+    total = sum(histogram)
+    cut = total * GROUND_PERCENTILE
+
+    def level(values) -> int:
+        seen = 0
+        for value in values:
+            seen += histogram[value]
+            if seen > cut:
+                return value
+        return values[-1]
+
+    light, dark = level(range(255, -1, -1)), level(range(256))
+    return ((light, light, light), (dark, dark, dark))
 
 
 def _x(config: RollupConfig, spec: dict[str, Any]) -> int:
@@ -182,8 +205,8 @@ def _qr(canvas: Image.Image, config: RollupConfig, spec: dict[str, Any], *, link
     size = sheet.px(spec["size_mm"])
     center_x = _x(config, spec)
     top = config.floor_y(spec["bottom_mm"]) - size
-    if "frame" in spec:
-        frame = sheet.px(spec["frame"]["width_mm"])
+    frame = sheet.px(spec["frame"]["width_mm"]) if "frame" in spec else 0
+    if frame:
         layer = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
         ImageDraw.Draw(layer).rounded_rectangle(
             (center_x - size // 2 - frame, top - frame, center_x - size // 2 + size + frame, top + size + frame),
@@ -191,9 +214,10 @@ def _qr(canvas: Image.Image, config: RollupConfig, spec: dict[str, Any], *, link
             fill=(*config.color(spec["frame"]["color"]), 255),
         )
         canvas.alpha_composite(layer)
-    box = paste_qr(
+    url = links[spec["link"]].url
+    card = paste_qr(
         canvas,
-        links[spec["link"]].url,
+        url,
         center_x=center_x,
         top=top,
         size=size,
@@ -201,7 +225,16 @@ def _qr(canvas: Image.Image, config: RollupConfig, spec: dict[str, Any], *, link
         corner_radius=sheet.px(config.qr["corner_radius_mm"]),
         dark=config.color(config.qr["dark"]),
     )
-    return Drawn(id=spec["id"], type="qr", role="qr", box=box)
+    modules = len(qr_matrix(url))
+    ## The box is what was drawn, frame included, so the safe area and the table zone see all of it;
+    ## the size rule reads the modules alone.
+    return Drawn(
+        id=spec["id"],
+        type="qr",
+        role="qr",
+        box=(card[0] - frame, card[1] - frame, card[2] + frame, card[3] + frame),
+        code_px=modules * module_size(modules, size, config.qr["quiet_modules"]),
+    )
 
 
 def _lines(copy: dict[str, Any], key: str) -> list[str]:
@@ -299,7 +332,7 @@ def _list(canvas: Image.Image, config: RollupConfig, spec: dict[str, Any], *, co
         wrapped = any(len(lines) > 1 for lines in stack.paragraphs)
         if not (spec.get("one_line") and wrapped) or stack.size <= min_size:
             break
-        size = stack.size - step
+        size = max(min_size, stack.size - step)
     if spec.get("one_line") and wrapped:
         raise RollupOverflowError(f"[{label}] {spec['id']}: a point does not fit one line at {stack.size}px — shorten it")
     if stack.overflows:

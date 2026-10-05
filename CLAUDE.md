@@ -1,9 +1,10 @@
 # asset-engine — agent notes
 
-The shared renderer for store screenshots, the Play feature graphic and print flyers. It is a real
-dependency of the apps, not a fork: NutriSpy (and later FieldFix) installs it, and nothing is
-copied back and forth. Interpreter: `~/.pyenv/versions/asset-engine/bin/python`. NutriSpy's venv
-has it installed editable, so an edit here is live there.
+The shared renderer for store screenshots, the Play feature graphic, print flyers and trade-fair
+roll-ups. It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
+(roll-ups) install it, and nothing is copied back and forth. Interpreter:
+`~/.pyenv/versions/asset-engine/bin/python`. Both apps' venvs have it installed editable, so an edit
+here is live there. Public on GitHub as `ataudt/asset-engine`; an app's `setup.py` pins a tag.
 
 # Code here, definitions in the app
 

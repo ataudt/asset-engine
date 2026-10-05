@@ -65,7 +65,16 @@ class LinkSettings:
 
 
 def parse_links(raw: dict, *, source: Path) -> LinkSettings:
-    """The ``links`` block of a product config. The store keys are optional, the rest required."""
+    """The ``links`` block of a product config. The store keys are optional, the rest required.
+
+    Optional together: ``apple_id`` without ``play_package`` (or the other way round) is a listing
+    half filled in, and would silently cost the print run its ``app`` code, so it is refused.
+    """
+    if bool(raw.get("apple_id")) != bool(raw.get("play_package")):
+        raise LinkError(
+            f"{source}: links names {'apple_id' if raw.get('apple_id') else 'play_package'} without "
+            f"{'play_package' if raw.get('apple_id') else 'apple_id'}; the app code needs both, or neither"
+        )
     root = get_project().root
     return LinkSettings(
         base_url=raw["base_url"].rstrip("/"),

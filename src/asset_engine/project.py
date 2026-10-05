@@ -8,8 +8,8 @@ Rules:
   - What the engine cannot know is asked of the project, never imported from the app: the locale
     set, the brand faces, the words a chip prints and the store pages (``PageRegistry``).
   - Each product is a section an app may leave out — an app with no store set has ``store=None``.
-    Asking for a section the app did not give is an error naming it (``store()``, ``flyers()``,
-    ``rollups()``), never a guess.
+    Asking for a section the app did not give is an error naming it (``store_files()``,
+    ``flyer_files()``, ``rollup_files()``), never a guess; the fields themselves are ``None``.
   - One project per process, installed at startup by ``set_project``; ``get_project`` raises until
     then rather than guessing one. The app's own package installs it, so every entry into the engine
     from that app passes through it.

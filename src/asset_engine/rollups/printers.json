@@ -2,9 +2,11 @@
   "_comment": [
     "Roll-up print formats as the shops' own data sheets state them. These are facts about a",
     "product, not about an app, which is why they live in the engine: an app's roll-up config names",
-    "one by key. Lengths in millimetres. `trim_mm` is the Endformat (width, height) including the",
+    "one by key. Lengths in millimetres. `trim_mm` is the trimmed sheet (width, height) INCLUDING the",
     "strips that are printed but hidden in the display; `hidden_mm` says which; `bleed_mm` is the",
-    "Beschnitt added around the Endformat; `safe_mm` is the Sicherheitsabstand from the visible edge.",
+    "Beschnitt added around it; `safe_mm` is the Sicherheitsabstand from the visible edge. Shops use",
+    "'Endformat' for different things: Flyeralarm's (850 x 2250) includes the hidden strips, while",
+    "WIRmachenDRUCK's (850 x 2000) is the visible area only — so read the drawing, not the word.",
     "A shop not listed here gets an entry here, from its data sheet, with the URL and the date read.",
     "Never reuse one shop's file for another: the data formats are not interchangeable."
   ],
@@ -18,7 +20,7 @@
   },
   "flyeralarm-classic-85x200": {
     "_source": "https://www.flyeralarm.com/sheets/de/rollupcl_85x200_sydr.pdf (Datenblatt Roll-Up Classic 85x200, updated 2026-05-20, read 2026-10-05)",
-    "_note": "Datenformat 870 x 2270 = 10 Beschnitt + 10 hidden under the rail + 1990 visible + 250 hidden in the cassette + 10 Beschnitt; the sheet's 2000 mm dimension includes the 10 mm rail strip. Profile ISO Coated v2 (FOGRA39), 100-150 dpi for large format.",
+    "_note": "Datenformat 870 x 2270 = 10 Beschnitt + 10 hidden under the rail + 1990 visible + 250 hidden in the cassette + 10 Beschnitt; the sheet's 2000 mm dimension includes the 10 mm rail strip. Profile and resolution are not on this sheet: Flyeralarm's general checklist (https://www.flyeralarm.com/blog/wp-content/uploads/Flyeralarm_Checkliste_Druckdatenerstellung-1.pdf, 12/2018) asks ISO Coated v2 (FOGRA39) and 100-150 dpi for large format.",
     "trim_mm": [850, 2250],
     "bleed_mm": 10,
     "hidden_mm": {"top": 10, "right": 0, "bottom": 250, "left": 0},

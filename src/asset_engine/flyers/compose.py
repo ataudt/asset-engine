@@ -85,6 +85,13 @@ def layout_stack(
     )
 
 
+def _link(links: dict, name: str):
+    """The campaign's link ``name``, or an error saying which links this app has."""
+    if name not in links:
+        raise FlyerConfigError(f"the layout wants the {name!r} link; the links block gives {sorted(links)}")
+    return links[name]
+
+
 def _background(config: FlyerConfig, spec: dict[str, Any], *, veil: float = 0.0) -> Image.Image:
     """The page's ground on the bled canvas: a plain colour, or a plate cut to fill it."""
     return background(config.page.canvas, spec, get_project().root, veil=veil)
@@ -161,7 +168,7 @@ def compose_text_page(config: FlyerConfig, campaign: Campaign) -> ComposedPage:
     boxes["qr"] = _paste_qr(
         canvas,
         config,
-        links[qr["link"]].url,
+        _link(links, qr["link"]).url,
         center_x_mm=qr["center_x_mm"],
         top_mm=qr["top_mm"],
         size_mm=qr["size_mm"],
@@ -312,7 +319,7 @@ def compose_image_page(
     boxes[f"qr:{store['link']}"] = _paste_qr(
         canvas,
         config,
-        links[store["link"]].url,
+        _link(links, store["link"]).url,
         center_x_mm=store["center_x_mm"],
         top_mm=store["qr_top_mm"],
         size_mm=store["qr_size_mm"],

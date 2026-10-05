@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asset-engine"
-version = "0.1.0"
-description = "Store screenshots, Play feature graphics and print flyers, composed from an app's own definitions"
+version = "0.1.1"
+description = "Store screenshots, Play feature graphics, print flyers and trade-fair roll-ups, composed from an app's own definitions"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
