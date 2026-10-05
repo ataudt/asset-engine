@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asset-engine"
+version = "0.1.0"
+description = "Store screenshots, Play feature graphics and print flyers, composed from an app's own definitions"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    # Pinned exactly: resampling and JPEG encoding change between releases, and every committed
+    # output in an app repo is a byte-for-byte function of its inputs and of this version.
+    "Pillow==12.2.0",
+    # Only the cmap is read, to pick a face per script.
+    "fonttools>=4.40",
+    # Pinned exactly: the QR module matrix is printed, and a new release may lay it out differently.
+    "segno==1.6.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+asset_engine = ["rollups/printers.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

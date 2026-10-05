@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Roll-up print formats as the shops' own data sheets state them. These are facts about a",
+    "product, not about an app, which is why they live in the engine: an app's roll-up config names",
+    "one by key. Lengths in millimetres. `trim_mm` is the Endformat (width, height) including the",
+    "strips that are printed but hidden in the display; `hidden_mm` says which; `bleed_mm` is the",
+    "Beschnitt added around the Endformat; `safe_mm` is the Sicherheitsabstand from the visible edge.",
+    "A shop not listed here gets an entry here, from its data sheet, with the URL and the date read.",
+    "Never reuse one shop's file for another: the data formats are not interchangeable."
+  ],
+  "wirmachendruck-premium-85x200": {
+    "_source": "https://www.wir-machen-druck.de/tpl/manns-partner/media/ddb/druckdatenskizzen/0/premium_rollup_bannerdisplay_85x200cm_40_1.pdf (Datenblatt Premium Roll-Up 85x200, read 2026-10-05)",
+    "_note": "Datenformat 856 x 2186 = 3 Beschnitt + 10 hidden under the top rail + 2000 visible + 170 hidden in the cassette + 3 Beschnitt. RGB is converted to CMYK by the shop. The sheet asks 300 dpi for images in general; roll-up practice and the other shops ask 100-150.",
+    "trim_mm": [850, 2180],
+    "bleed_mm": 3,
+    "hidden_mm": {"top": 10, "right": 0, "bottom": 170, "left": 0},
+    "safe_mm": 3
+  },
+  "flyeralarm-classic-85x200": {
+    "_source": "https://www.flyeralarm.com/sheets/de/rollupcl_85x200_sydr.pdf (Datenblatt Roll-Up Classic 85x200, updated 2026-05-20, read 2026-10-05)",
+    "_note": "Datenformat 870 x 2270 = 10 Beschnitt + 10 hidden under the rail + 1990 visible + 250 hidden in the cassette + 10 Beschnitt; the sheet's 2000 mm dimension includes the 10 mm rail strip. Profile ISO Coated v2 (FOGRA39), 100-150 dpi for large format.",
+    "trim_mm": [850, 2250],
+    "bleed_mm": 10,
+    "hidden_mm": {"top": 10, "right": 0, "bottom": 250, "left": 0},
+    "safe_mm": 30
+  }
+}
