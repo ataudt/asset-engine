@@ -25,7 +25,7 @@ from PIL import Image
 FRAME_SUFFIX = ".jpg"
 
 ## The extensions a frame may have carried before, so a stale sibling can be cleared. Without this,
-## a tree rebuilt after the format changed holds both ``Phone 1.png`` and ``Phone 1.jpg``, and
+## a tree rebuilt after the format changed holds both ``…_phone_01.png`` and ``…_phone_01.jpg``, and
 ## whichever glob matched both would hand the store two copies of every frame.
 _STALE_SUFFIXES = (".png", ".jpeg", ".jpg")
 

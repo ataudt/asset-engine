@@ -7,11 +7,11 @@ Rules:
   - ``--device`` likewise, and it defaults to *every* device in config.json. The stores want both
     sets, so producing only the phone one has to be asked for rather than being what a bare
     ``build`` happens to do.
-  - The tree is ``<default_out_dir>/<lang>/<set>/`` (NutriSpy: ``appstore/screenshots/``), locale
-    first — the shape every other locale tree in an app repo should have.
+  - The tree is ``<default_out_dir>/<set>/<lang>/`` (NutriSpy: ``appstore/screenshots/``), set
+    first, because a store page is what gets filled by hand — see ``ScreenshotConfig.frames_dir``.
   - ``--design`` is a single name and defaults to none: a bare ``build`` renders the look the
-    stores get, into ``appstore/screenshots/<lang>/default/``. A design renders into
-    ``appstore/screenshots/<lang>/<design>/``, so an experiment cannot be picked up by the
+    stores get, into ``appstore/screenshots/default/<lang>/``. A design renders into
+    ``appstore/screenshots/<design>/<lang>/``, so an experiment cannot be picked up by the
     metadata builder or fastlane by accident — which is also why a design named after a store page
     is refused: they share that level.
   - ``--variant`` names the store pages to render, repeatable and comma-separated, and ``default``
@@ -54,7 +54,6 @@ from asset_engine.store.compose import (
     resolve_capture,
 )
 from asset_engine.store.feature_graphic import (
-    OUTPUT_NAME as FEATURE_GRAPHIC_NAME,
     FeatureGraphicError,
     compose_feature_graphic,
     load_feature_config,
@@ -162,14 +161,14 @@ MOCKUPS_ROOT_NAME = "_mockups"
 
 
 def _out_dir(args: argparse.Namespace, config: ScreenshotConfig, language: str) -> Path:
-    """Where this set's frames for one locale are written: ``<root>/<locale>/<set>``.
+    """Where this set's frames for one locale are written: ``<root>/<set>/<locale>``.
 
-    Per locale rather than a root the caller joins the locale onto, because the locale is the *outer*
-    level: a root computed once outside the language loop cannot express that. ``--out`` repeats the
+    Per locale rather than a root the caller joins the locale onto, so the order of the two levels is
+    stated in one place (``frames_dir``) and here for ``--out``. ``--out`` repeats the
     renderer's own shape under a different root, so a tree built there reads like the real one.
     """
     if args.out:
-        return Path(args.out).resolve() / language / config.out_subdir
+        return Path(args.out).resolve() / config.out_subdir / language
     return config.frames_dir(language)
 
 
@@ -177,13 +176,13 @@ def _mockup_dir(args: argparse.Namespace, config: ScreenshotConfig, language: st
     """Where the text-free mockups for one locale go.
 
     Under one ``_mockups`` root rather than inside the set's own folder: the name is the whole
-    containment — no builder and no fastlane lane walks a path with it in — and putting it at the
-    locale's own level instead would place it where a page or a design goes, in the namespace
-    ``load_config`` already polices for collisions.
+    containment — no builder and no fastlane lane walks a path with it in — and putting it inside a
+    set's folder instead would place it where a locale goes, beside the frames a console upload is
+    picked from. It mirrors the rendered tree below it: ``_mockups/<set>/<locale>``.
     """
     if args.out:
-        return Path(args.out).resolve() / language / config.out_subdir
-    return config.default_out_dir / MOCKUPS_ROOT_NAME / language / config.out_subdir
+        return Path(args.out).resolve() / config.out_subdir / language
+    return config.default_out_dir / MOCKUPS_ROOT_NAME / config.out_subdir / language
 
 
 def _log(
@@ -282,9 +281,13 @@ def _compose_device(args: argparse.Namespace, device: str, variant: str, run: Ru
             try:
                 mockup = compose_mockup(config, str(lang), slot)
             except RawCaptureError as error:
-                run.fail(f"{lang}/{device} mockup {slot.caption}", str(error), clear_outputs([out_dir / slot.template]))
+                run.fail(
+                    f"{lang}/{device} mockup {slot.caption}",
+                    str(error),
+                    clear_outputs([out_dir / config.frame_name(str(lang), slot.caption)]),
+                )
                 continue
-            save_frame(mockup.image, out_dir / slot.template)
+            save_frame(mockup.image, out_dir / config.frame_name(str(lang), slot.caption))
             written += 1
         _log(f"wrote {written} mockup(s) -> {out_dir}", language=lang, device=device)
 
@@ -327,7 +330,7 @@ def _build_device(args: argparse.Namespace, device: str, variant: str, run: Run)
         written = 0
         for slot in config.slots:
             caption = captions[slot.caption - 1]
-            dest = out_dir / slot.template
+            dest = out_dir / config.frame_name(str(lang), slot.caption)
             if dest.exists() and not args.force and not args.dry_run:
                 _log(f"skip (exists, use --force): {dest.name}", language=lang, device=device)
                 continue
@@ -458,7 +461,7 @@ def _cmd_feature_graphic(args: argparse.Namespace) -> int:
 
     run = Run()
     for lang in languages:
-        dest = _out_dir(args, config, str(lang)) / FEATURE_GRAPHIC_NAME
+        dest = _out_dir(args, config, str(lang)) / config.feature_graphic_name(str(lang))
         label = f"{lang} feature graphic"
         try:
             headlines = read_headlines(lang, config)

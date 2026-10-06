@@ -55,11 +55,12 @@ from asset_engine.store.output import FRAME_SUFFIX
 from asset_engine.project import get_project
 from asset_engine.store.render import HeadlineLayout, layout_headline
 
-OUTPUT_NAME = f"featureGraphic{FRAME_SUFFIX}"
-
-## The file name Play reserves for this asset, and what the metadata builder copies it to. Play
-## matches the stem against {png,jpg,jpeg}, so the suffix follows the rest of the frames.
-PLAY_ASSET_NAME = OUTPUT_NAME
+## The file name Play reserves for this asset in an upload tree, and what the metadata builder
+## copies it to. Play matches the stem against {png,jpg,jpeg}, so the suffix follows the rest of the
+## frames. Not the *rendered* file's name: that is the project's ``feature_graphic_template``
+## (``ScreenshotConfig.feature_graphic_name``), because the upload tree's name is fastlane's
+## contract and the rendered one is what a person searches the console's asset library for.
+PLAY_ASSET_NAME = f"featureGraphic{FRAME_SUFFIX}"
 
 
 class FeatureGraphicError(RuntimeError):
@@ -73,8 +74,8 @@ class Block:
     A block *is* a slot drawn on another canvas — the same stance ``config.json``'s ``_comment_devices``
     takes for the iPad. It carries the whole of a slot's furniture (phone, scanner, chips, callouts,
     mascot, stickers) in banner pixels, so block 1 can say ``"phone": null`` and be the photograph
-    exactly as frame 1 is. ``Slot.band_bottom`` and ``Slot.template`` go unused here: the banner has
-    one headline band for all three blocks and writes one file.
+    exactly as frame 1 is. ``Slot.band_bottom`` goes unused here: the banner has one headline band
+    for all three blocks and writes one file.
     """
 
     headline: int
@@ -150,7 +151,7 @@ def load_feature_config(path: Path | None = None) -> FeatureGraphicConfig:
                 center_x=center_x,
                 text=style,
                 capture=entry["capture"],
-                slot=parse_slot({**entry, "caption": entry["capture"]}, {"phone": {}}, (0, 0), OUTPUT_NAME),
+                slot=parse_slot({**entry, "caption": entry["capture"]}, {"phone": {}}, (0, 0)),
             )
         )
     return FeatureGraphicConfig(
@@ -332,7 +333,6 @@ def compose_feature_graphic(
 
 
 __all__ = [
-    "OUTPUT_NAME",
     "PLAY_ASSET_NAME",
     "Block",
     "FeatureGraphicConfig",

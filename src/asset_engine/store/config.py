@@ -10,8 +10,10 @@ Rules:
   - Slots 4 onward share one layout (left background, upright phone, no mascot). That is said once
     in ``slot_defaults``; a slot lists only what it does differently.
   - Raw captures are named by what they *show*, in the capturer's own language, so the caption ->
-    file name mapping lives per locale in ``captures.json``. ``Slot.template`` stays ``Phone N``:
-    it is the output file name, not the capture's.
+    file name mapping lives per locale in ``captures.json``. The *output* file name is the
+    project's ``frame_template``, formatted per locale by ``ScreenshotConfig.frame_name`` — so a
+    rendered frame names its locale, set, device and caption, and stays findable once it has been
+    dragged into a store console that shows nothing but the file name.
   - A frame that shows food names a *dish* of ``dishes.json``, and the dish owns both halves of
     what the frame says about it: the capture per language and every number a chip may show. A
     chip carries a nutrient and a place, never a value, so a picture of one dish under the numbers
@@ -368,7 +370,6 @@ class Slot:
     """One screenshot: the caption bullet, the file name, and how the artwork is assembled."""
 
     caption: int
-    template: str
     background: str
     ## ``None`` for a frame that is a picture and not a screen: the billboard's first.
     phone: Placement | None
@@ -403,7 +404,7 @@ class Slot:
 @dataclass(frozen=True)
 class ScreenshotConfig:
     ## Which entry of the ``devices`` block this is — ``PHONE`` for the base geometry. It names the
-    ## output set, so it is what the callers switch on; the file names come from ``Slot.template``.
+    ## output set, so it is what the callers switch on; the file names come from ``frame_name``.
     device: str
     ## Which entry of the ``designs`` block is laid over the layout, or ``None`` for the layout as
     ## written — the look the stores get. It names the output set apart from the base one.
@@ -455,6 +456,33 @@ class ScreenshotConfig:
     dishes: dict[str, Dish]
     ## Languages to try, in order, when the requested one has no capture for a slot.
     capture_fallbacks: tuple[str, ...]
+    ## The project's file-name patterns, without the extension: ``frame_template`` takes
+    ## ``{language}``, ``{set}``, ``{device}`` and ``{caption}``, ``feature_graphic_template`` the
+    ## first two. Required, because the name is the project's: it is what a person searches for in a
+    ## console that lists uploads by file name alone.
+    frame_template: str
+    feature_graphic_template: str
+
+    def frame_name(self, language: str, caption: int) -> str:
+        """The file name of one rendered frame, e.g. ``de_histamine_phone_03.jpg``."""
+        return (
+            self.frame_template.format(
+                language=language, set=self.out_subdir, device=self.device, caption=caption
+            )
+            + FRAME_SUFFIX
+        )
+
+    def frame_path(self, language: str, caption: int) -> Path:
+        """Where one rendered frame is: ``frames_dir`` plus ``frame_name``."""
+        return self.frames_dir(language) / self.frame_name(language, caption)
+
+    def feature_graphic_name(self, language: str) -> str:
+        """The file name of the rendered Play feature graphic for one locale."""
+        return self.feature_graphic_template.format(language=language, set=self.out_subdir) + FRAME_SUFFIX
+
+    def feature_graphic_path(self, language: str) -> Path:
+        """Where the rendered Play feature graphic is, for one locale."""
+        return self.frames_dir(language) / self.feature_graphic_name(language)
 
     def capture_stem(self, language: str, slot: Slot) -> str | None:
         """The raw capture's file name (no extension) for ``slot`` in ``language``.
@@ -505,16 +533,17 @@ class ScreenshotConfig:
     def frames_dir(self, language: str) -> Path:
         """Where this set's frames are written, for one locale.
 
-        ``<root>/<locale>/<set>``, locale first — the shape ``appstore/locales/``, ``frontend/locales/``,
-        ``marketing/website/locales/``, ``website/`` and ``images/captures/`` all have in NutriSpy, so reading one
-        tree in this repo tells you how to read the rest.
+        ``<root>/<set>/<locale>``, set first — unlike an app's copy trees, which are locale first. A
+        set is a store page, and a page is filled in a console one language after another, by hand:
+        whoever picks a custom listing's graphics reads this tree page by page. The file name
+        (``frame_template``) leads with the set for the same reason.
 
         The formula lives here rather than at each caller, because two of them are a release away
         from each other: NutriSpy's ``marketing.app_store_metadata`` assembles the Apple bundle out of it, and
         ``marketing.website.build_og_images`` composites the same frames into the page's share card.
         A second spelling of it is a tree one of them writes and the other cannot find.
         """
-        return self.default_out_dir / language / self.out_subdir
+        return self.default_out_dir / self.out_subdir / language
 
     @property
     def ground_source(self) -> Path:
@@ -670,7 +699,7 @@ def _chips(
     return {name: tuple(_chip(chip, offset, name) for chip in chips) for name, chips in raw.items()}
 
 
-SLOT_FIELDS = frozenset(field.name for field in fields(Slot)) - {"caption", "template"}
+SLOT_FIELDS = frozenset(field.name for field in fields(Slot)) - {"caption"}
 
 
 def _device_slot(
@@ -678,21 +707,19 @@ def _device_slot(
     own: dict,
     defaults: dict,
     offset: tuple[int, int],
-    template: str,
 ) -> Slot:
     """One slot as a device draws it: its own fields in its own pixels, the rest on the offset."""
-    slot = parse_slot(raw, defaults, offset, template)
+    slot = parse_slot(raw, defaults, offset)
     if not own:
         return slot
-    unshifted = parse_slot({**raw, **own}, defaults, (0, 0), template)
+    unshifted = parse_slot({**raw, **own}, defaults, (0, 0))
     return replace(slot, **{key: getattr(unshifted, key) for key in own})
 
 
-def parse_slot(raw: dict, defaults: dict, offset: tuple[int, int], template: str) -> Slot:
+def parse_slot(raw: dict, defaults: dict, offset: tuple[int, int]) -> Slot:
     dish = _dish_choice(raw.get("dish"))
     return Slot(
         caption=raw["caption"],
-        template=raw.get("template", template).format(caption=raw["caption"]),
         background=raw.get("background", defaults.get("background", "")),
         ## ``"phone": null`` is how a slot says it has none; saying nothing inherits the default.
         phone=(
@@ -1002,9 +1029,22 @@ def load_config(
     text["band_top"] += offset[1]
     text["fallback_band_bottom"] += offset[1]
 
-    ## The extension is not a device's to choose: the writer, the discovery globs and the Fastfile
-    ## all read ``FRAME_SUFFIX``, so a device names only its prefix and the suffix is appended here.
-    template_name = override.get("template", "Phone {caption}") + FRAME_SUFFIX
+    ## One pattern for every device and page, so a name cannot say one thing in one set and another
+    ## in the next. Formatted once against sample values here, so a placeholder the engine does not
+    ## fill fails at load and not on the first frame written.
+    frame_template = raw["frame_template"]
+    feature_graphic_template = raw["feature_graphic_template"]
+    try:
+        frame_template.format(language="xx", set="s", device="d", caption=1)
+        feature_graphic_template.format(language="xx", set="s")
+    except (KeyError, IndexError, ValueError) as error:
+        raise KeyError(
+            f"frame_template / feature_graphic_template use a placeholder the engine does not fill "
+            f"({error}); frames take {{language}} {{set}} {{device}} {{caption}}, the feature "
+            f"graphic {{language}} {{set}}"
+        ) from error
+    if "{caption" not in frame_template:
+        raise KeyError("frame_template has no {caption}, so every frame of a set would share one file")
     defaults = raw["slot_defaults"]
     ## A design states only the slots it recomposes, keyed by caption number. ``slots`` itself is a
     ## list, and a list replaces the list it meets, so a design reaching into it directly would have
@@ -1076,7 +1116,6 @@ def load_config(
             },
             defaults,
             offset,
-            template_name,
         )
         for s in slots
     )
@@ -1136,6 +1175,8 @@ def load_config(
         variant_dishes=frozenset(caption for caption, own in variant_slots.items() if "dish" in own),
         dishes=load_dishes(),
         capture_fallbacks=tuple(raw["capture_fallbacks"]),
+        frame_template=frame_template,
+        feature_graphic_template=feature_graphic_template,
     )
 
 

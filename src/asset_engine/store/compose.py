@@ -130,10 +130,11 @@ def raw_path(config: ScreenshotConfig, language: str, slot: Slot) -> Path:
     if resolved is not None:
         return resolved[0]
     ## Nothing in this locale or the fallbacks: name a path that does not exist, so the caller's
-    ## "not a file" branch reports which locale and slot came up empty. The suffix is dropped
-    ## because ``slot.template`` is the *output* name: captures are PNG off a phone, and pointing at
-    ## a rendered frame's extension would send somebody looking for the wrong file.
-    return config.raw_dir / language / Path(slot.template).stem
+    ## "not a file" branch reports which locale and slot came up empty. It is the stem the slot
+    ## asked for, or the caption when nothing names one — never the *output* name, which is a
+    ## rendered frame's and would send somebody looking for the wrong file.
+    stem = config.capture_stem(language, slot) or f"caption {slot.caption}"
+    return config.raw_dir / language / stem
 
 
 def paste_rotated(
