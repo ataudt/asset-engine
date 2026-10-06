@@ -25,9 +25,9 @@ Rules:
     aggregates are one (``aggregate.py``).
   - Nothing is capped silently: captions with no slot in config.json are reported on every run, and
     a page's frame that resolved its capture from the default set's map says so (``default:<code>``).
-  - ``build`` always rewrites every frame it renders (``printing.report``): an overflowing caption is
-    drawn as it falls and named in a loud block, and a frame with no capture at all loses its
-    previous file, so what is in the tree is always what the code renders now.
+  - A frame ``build`` renders is never withheld for a finding (``printing.report``): an overflowing
+    caption is drawn as it falls and named in a loud block, and a frame with no capture at all loses
+    its previous file, so a stale frame is not left looking current.
 """
 
 from __future__ import annotations
@@ -77,9 +77,9 @@ examples:
   {prog} build                      # every page, default first
   {prog} build --language de,en
   {prog} build --device phone
-  {prog} build --language de --device phone
+  {prog} build --language de --device phone --force
   {prog} build --variant default
-  {prog} build --variant <page>,<page>
+  {prog} build --variant <page>,<page> --force
   {prog} build --variant <page> --language de,en --dry-run
   {prog} compose --language de
   {prog} report
@@ -328,6 +328,10 @@ def _build_device(args: argparse.Namespace, device: str, variant: str, run: Run)
         for slot in config.slots:
             caption = captions[slot.caption - 1]
             dest = out_dir / slot.template
+            if dest.exists() and not args.force and not args.dry_run:
+                _log(f"skip (exists, use --force): {dest.name}", language=lang, device=device)
+                continue
+
             label = f"{lang}/{device} slot {slot.caption}"
             if args.dry_run:
                 ## Lay out against a throwaway canvas so --dry-run still validates fit and fonts.
@@ -554,6 +558,7 @@ def build_parser(
     _add_design_arg(build)
     _add_variant_arg(build)
     build.add_argument("--out", metavar="DIR", help="Output root (default: config default_out_dir).")
+    build.add_argument("--force", action="store_true", help="Overwrite existing output files.")
     build.add_argument("--dry-run", action="store_true", help="Check fit, fonts and captures; write nothing.")
     build.set_defaults(func=_cmd_build)
 

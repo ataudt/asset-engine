@@ -66,7 +66,7 @@ findings in a loud `!!` block.
 `build` writes the PDF (the whole data format), `preview.png` (the visible area) and `guides.png`
 (the hidden strips, the safety margin, the table zone and the eye-level band drawn in).
 
-**Every build, of every product, always writes what the code renders now** (`printing/report.py`).
+**No build, of any product, withholds output because of a finding** (`printing/report.py`).
 A judgement (a rule finding, type that overflows) is drawn as it falls and printed loudly; what
 cannot be drawn at all (a missing capture, picture or badge, a broken config) fails loudly and
 removes that unit's previous output, so a stale file is never left looking current.
