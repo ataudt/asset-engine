@@ -7,14 +7,15 @@ Rules:
     bezel, the drop shadow and the rotation come from ``store.compose``.
   - The faces are the flyer's own (``fonts`` in ``config.json``), picked by coverage ahead of the
     store's list, so a script they lack still falls back to a face that has it.
-  - Type that does not fit stops the build. A flyer with a clipped line is a reprint.
+  - Type that does not fit is drawn anyway, at its smallest size, and named in the page's
+    ``warnings``; the build prints them loudly and writes the flyer as it fell.
   - Every element that must survive the cut reports its box, so the safe margin can be checked
     against what was drawn and not against what ``config.json`` intended.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -42,16 +43,14 @@ from asset_engine.store.fonts import font_for_text
 from asset_engine.store.render import layout_headline
 
 
-class FlyerOverflowError(FlyerConfigError):
-    """The copy does not fit its band even at the smallest size."""
-
-
 @dataclass(frozen=True)
 class ComposedPage:
     """One page on the bled canvas, and where its cut-sensitive elements ended up."""
 
     image: Image.Image
     boxes: dict[str, Box]
+    ## What is wrong with the page as drawn (type that overflows its band), for the build to say.
+    warnings: list[str] = field(default_factory=list)
 
 
 def layout_stack(
@@ -154,10 +153,11 @@ def compose_text_page(config: FlyerConfig, campaign: Campaign) -> ComposedPage:
     draw = ImageDraw.Draw(canvas)
     boxes: dict[str, Box] = {"wordmark": _draw_wordmark(draw, config)}
 
+    warnings: list[str] = []
     stack = layout_stack(draw, copy["paragraphs"], spec["text"], config, label=campaign.name)
     if stack.overflows:
-        raise FlyerOverflowError(
-            f"[{campaign.name}] the copy is {stack.width}x{stack.height}px at the smallest size "
+        warnings.append(
+            f"back: the copy is {stack.width}x{stack.height}px at the smallest size "
             f"({stack.size}px) and does not fit its band — trim copy/{campaign.language}.json"
         )
     boxes["text"] = draw_stack(
@@ -182,7 +182,7 @@ def compose_text_page(config: FlyerConfig, campaign: Campaign) -> ComposedPage:
     draw.text(label_at, copy["qr_label"], font=label_font, fill=tuple(label["color"]), anchor="ma")
     boxes["label"] = draw.textbbox(label_at, copy["qr_label"], font=label_font, anchor="ma")
 
-    return ComposedPage(image=canvas.convert("RGB"), boxes=boxes)
+    return ComposedPage(image=canvas.convert("RGB"), boxes=boxes, warnings=warnings)
 
 
 def _capture_path(config: FlyerConfig, screenshots: ScreenshotConfig, language: str) -> Path:
@@ -266,9 +266,10 @@ def compose_image_page(
         max_lines=tagline["max_lines"],
     )
     layout = layout_headline(draw, copy["tagline"], style, label=campaign.name, fonts=config.fonts["headline"])
+    warnings: list[str] = []
     if layout.overflows:
-        raise FlyerOverflowError(
-            f"[{campaign.name}] the tagline needs {len(layout.lines)} lines at {layout.size}px "
+        warnings.append(
+            f"front: the tagline needs {len(layout.lines)} lines at {layout.size}px "
             f"and does not fit — trim copy/{campaign.language}.json"
         )
     center_x = page.at(page.trim_mm[0] / 2)
@@ -325,7 +326,7 @@ def compose_image_page(
         size_mm=store["qr_size_mm"],
     )
 
-    return ComposedPage(image=canvas.convert("RGB"), boxes=boxes)
+    return ComposedPage(image=canvas.convert("RGB"), boxes=boxes, warnings=warnings)
 
 
 def compose_flyer(config: FlyerConfig, campaign: Campaign) -> list[ComposedPage]:
@@ -341,7 +342,6 @@ def save_pdf(pages: list[ComposedPage], path: Path, page: Page) -> None:
 __all__ = [
     "Box",
     "ComposedPage",
-    "FlyerOverflowError",
     "StackLayout",
     "compose_flyer",
     "compose_image_page",

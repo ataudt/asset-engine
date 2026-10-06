@@ -21,6 +21,7 @@ from asset_engine.flyers.compose import compose_flyer, save_pdf
 from asset_engine.flyers.config import Campaign, FlyerConfig, FlyerConfigError, load_config
 from asset_engine.printing.copy import CopyError
 from asset_engine.printing.links import LinkError, campaign_links, render_page, write_pages
+from asset_engine.printing.report import Run, clear_outputs
 
 
 def _relative(path: Path) -> str:
@@ -55,35 +56,39 @@ def _designs(config: FlyerConfig, names: list[str] | None) -> list[str]:
 def _cmd_build(args: argparse.Namespace) -> int:
     config = load_config()
     out_root = Path(args.out).expanduser() if args.out else config.default_out_dir
-    problems = 0
+    run = Run()
     for campaign in _selected(config, args.campaign):
         for design in _designs(config, args.design):
             label = f"{campaign.name}/{design}"
-            try:
-                pages = compose_flyer(config.for_design(design), campaign)
-            except (FlyerConfigError, LinkError, CopyError) as error:
-                print(f"FAIL {label}: {error}")
-                problems += 1
-                continue
-
             ## One folder per design, and the design in the file name too: the PDF is what gets
             ## sent to a printer, and there it has to say which of the looks it is.
             out_dir = out_root / campaign.name / design
             pdf = out_dir / f"Flyer - {campaign.language.upper()} - {design}.pdf"
+            try:
+                pages = compose_flyer(config.for_design(design), campaign)
+            except (FlyerConfigError, LinkError, CopyError, FileNotFoundError) as error:
+                run.fail(label, str(error), clear_outputs([pdf, *sorted(out_dir.glob("page-*.png"))]))
+                continue
+
             save_pdf(pages, pdf, config.page)
             ## The previews are cut to the trim size: they show the flyer as it comes back from
             ## the printer, while the PDF carries the bleed the printer asks for.
             for number, composed in enumerate(pages, start=1):
                 composed.image.crop(config.page.trim_box).save(out_dir / f"page-{number}.png", format="PNG")
             print(f"ok   {label}: {_relative(pdf)}")
+            run.warn(label, [warning for composed in pages for warning in composed.warnings])
 
         stale = _stale_pages(config, campaign)
         if stale:
-            print("     the QR codes point at pages that are missing or out of date:")
-            for path in stale:
-                print(f"       {path}")
-            print(f"     run `{config.links.command} links` and deploy the website before printing")
-    return 1 if problems else 0
+            run.warn(
+                f"{campaign.name} QR pages",
+                [
+                    "the QR codes point at pages that are missing or out of date:",
+                    *stale,
+                    f"run `{config.links.command} links` and deploy the website before printing",
+                ],
+            )
+    return run.summary()
 
 
 def _cmd_links(args: argparse.Namespace) -> int:

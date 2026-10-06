@@ -34,8 +34,10 @@ outputs in the apps (website screens, share cards) depend on it.
   them, with the URL and the date read. A new shop is a new entry read off its data sheet. Never
   adjust one shop's numbers to fit another: the formats are not interchangeable.
 - `rollups/rules.py` thresholds each name their source. A threshold changes because a better source
-  says so, not because a layout fails it. A failing layout is fixed in the app's config. Warnings
-  (low picture resolution, logo or QR outside its band) do not stop a build.
+  says so, not because a layout fails it. A failing layout is fixed in the app's config.
+- **No build withholds output.** Findings and overflowing type are drawn and printed loudly;
+  only what cannot be drawn at all fails, and it removes that unit's old files. A withheld output
+  leaves the previous file standing, which is then judged as if it were the current code.
 
 # Before changing an API
 

@@ -247,8 +247,12 @@ def compose_feature_graphic(
     screenshots: ScreenshotConfig | None = None,
     config: FeatureGraphicConfig | None = None,
     label: str = "",
-) -> Image.Image:
-    """Draw the full graphic: background plate, three phones, two mascots, three headlines."""
+) -> tuple[Image.Image, list[str]]:
+    """Draw the full graphic: background plate, three phones, two mascots, three headlines.
+
+    Returns the image and the headlines that overflow their block. Those are drawn as they fall;
+    the build writes the graphic and names them loudly (``printing.report``).
+    """
     screenshots = screenshots or load_config()
     config = config or load_feature_config()
 
@@ -324,12 +328,7 @@ def compose_feature_graphic(
                 anchor="ma",
             )
 
-    if overflows:
-        ## Same stance as the screenshot build: clipped type is a rejected asset, not a warning.
-        raise FeatureGraphicError(
-            f"headline(s) do not fit the feature graphic — trim the copy: {'; '.join(overflows)}"
-        )
-    return image
+    return image, overflows
 
 
 __all__ = [

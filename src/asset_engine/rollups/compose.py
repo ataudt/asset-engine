@@ -8,8 +8,8 @@ Rules:
     of its face, the lightest and darkest of the ground under it measured before it was drawn, and
     for a photograph the resolution it actually prints at. ``rules`` judges the roll-up from these, not
     from what the config meant.
-  - Type that does not fit its band stops the build, as on the flyer: a clipped line on a two-metre
-    banner is a reprint.
+  - Type that does not fit its band is drawn anyway, at its smallest size, and recorded on its
+    ``Drawn`` (``overflow``); ``rules`` reports it, and the build writes the banner as it fell.
 """
 
 from __future__ import annotations
@@ -28,10 +28,6 @@ from asset_engine.rollups.config import RollupConfig, RollupConfigError, read_co
 from asset_engine.store.compose import apply_scrim, cover
 from asset_engine.store.config import ScrimSpec, TextStyle
 from asset_engine.store.render import layout_headline
-
-
-class RollupOverflowError(RollupConfigError):
-    """Copy does not fit its band even at the smallest size."""
 
 
 @dataclass(frozen=True)
@@ -66,6 +62,8 @@ class Drawn:
     raster: Raster | None = None
     ## The width of a QR code's modules alone, without the card's quiet zone around them.
     code_px: int = 0
+    ## Why the type did not fit its band, when it did not; drawn anyway at its smallest size.
+    overflow: str = ""
 
 
 @dataclass(frozen=True)
@@ -132,7 +130,9 @@ def _photo(canvas: Image.Image, config: RollupConfig, spec: dict[str, Any], **_)
 
     ``top_mm`` may be ``"edge"``: the band then runs to the top of the data format. ``shade`` darkens
     the photograph along its height (``stops`` as fractions of the band, 0 at its top), so type set
-    over it keeps its contrast; ``fade_mm`` dissolves its top or bottom edge into what lies under it.
+    over it keeps its contrast; ``shade_x`` does the same across (0 at the left), for a photograph
+    whose subject stands beside the type, so the type's side is darkened and the face is not;
+    ``fade_mm`` dissolves its top or bottom edge into what lies under it.
     """
     top = 0 if spec["top_mm"] == "edge" else config.floor_y(spec["top_mm"])
     bottom = config.floor_y(spec["bottom_mm"])
@@ -144,6 +144,12 @@ def _photo(canvas: Image.Image, config: RollupConfig, spec: dict[str, Any], **_)
     if "shade" in spec:
         shade = spec["shade"]
         apply_scrim(band, ScrimSpec(color=config.color(shade["color"]), stops=tuple(map(tuple, shade["stops"]))))
+    if "shade_x" in spec:
+        ## The scrim runs down; turned a quarter clockwise, the band's left edge is its top.
+        shade = spec["shade_x"]
+        turned = band.transpose(Image.ROTATE_270)
+        apply_scrim(turned, ScrimSpec(color=config.color(shade["color"]), stops=tuple(map(tuple, shade["stops"]))))
+        band = turned.transpose(Image.ROTATE_90)
 
     mask = Image.new("L", size, 255)
     fade = spec.get("fade_mm", {})
@@ -264,11 +270,11 @@ def _text(canvas: Image.Image, config: RollupConfig, spec: dict[str, Any], *, co
     layout = layout_headline(
         draw, lines, style, label=f"{label} {spec['id']}", fonts=config.fonts[spec["font"]], keep_lines=spec.get("keep_lines", False)
     )
-    if layout.overflows:
-        raise RollupOverflowError(
-            f"[{label}] {spec['id']} needs {len(layout.lines)} lines at {layout.size}px and does not fit "
-            f"its band — trim the copy or widen band_mm"
-        )
+    overflow = (
+        f"needs {len(layout.lines)} lines at {layout.size}px and does not fit its band — trim the copy or widen band_mm"
+        if layout.overflows
+        else ""
+    )
     x = _x(config, spec)
     centred = "center_x_mm" in spec
     left = x - layout.width // 2 if centred else x
@@ -294,6 +300,7 @@ def _text(canvas: Image.Image, config: RollupConfig, spec: dict[str, Any], *, co
         family=family,
         color=color,
         ground=ground,
+        overflow=overflow,
     )
 
 
@@ -334,9 +341,11 @@ def _list(canvas: Image.Image, config: RollupConfig, spec: dict[str, Any], *, co
             break
         size = max(min_size, stack.size - step)
     if spec.get("one_line") and wrapped:
-        raise RollupOverflowError(f"[{label}] {spec['id']}: a point does not fit one line at {stack.size}px — shorten it")
-    if stack.overflows:
-        raise RollupOverflowError(f"[{label}] {spec['id']} does not fit its band at {stack.size}px — trim the points")
+        overflow = f"a point does not fit one line at {stack.size}px — shorten it"
+    elif stack.overflows:
+        overflow = f"does not fit its band at {stack.size}px — trim the points"
+    else:
+        overflow = ""
     left = sheet.x(spec["left_mm"])
     box = (left, stack.top, left + indent + stack.width, stack.top + stack.height)
     ground = _ground_under(canvas, box)
@@ -362,6 +371,7 @@ def _list(canvas: Image.Image, config: RollupConfig, spec: dict[str, Any], *, co
         family=family,
         color=color,
         ground=ground,
+        overflow=overflow,
     )
 
 
@@ -389,4 +399,4 @@ def compose_rollup(config: RollupConfig, campaign: Campaign) -> ComposedRollup:
     return ComposedRollup(image=canvas.convert("RGB"), drawn=drawn)
 
 
-__all__ = ["ELEMENT_TYPES", "ComposedRollup", "Drawn", "Raster", "RollupOverflowError", "compose_rollup"]
+__all__ = ["ELEMENT_TYPES", "ComposedRollup", "Drawn", "Raster", "compose_rollup"]

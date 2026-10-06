@@ -4,9 +4,11 @@ Layer: asset engine.
 Rules:
   - Each check judges ``compose.Drawn`` records — real boxes, real glyph heights, the real ground
     under the type — never the config's intentions.
-  - An *error* stops the build: the banner would fail at the stand (unreadable from where people
-    stand, hidden behind a table, cut off by the cassette). A *warning* is printed and the PDF is
-    written: a judgement call, or a known follow-up such as a photograph not yet at full resolution.
+  - No finding stops a build (``printing.report``): the banner is always written, and the findings
+    are printed loudly with it. An *error* is what the rule expects to fail at the stand (unreadable
+    from where people stand, hidden behind a table, cut off by the cassette); a *warning* is a
+    judgement call or a known follow-up such as a photograph not yet at full resolution. The rules are
+    rules of thumb and can misjudge — the preview is what decides.
   - The thresholds are rules of thumb from print shops and trade-fair guides, not standards; each
     names its source. Sources read 2026-10-05:
       J-A-B    https://www.j-a-b.net/how-to-design-a-trade-show-banner-that-attracts-attention-sizes-layo
@@ -108,6 +110,8 @@ def check(config: RollupConfig, drawn: list[Drawn]) -> list[Finding]:
         findings.append(Finding(level, element if isinstance(element, str) else element.id, message))
 
     for item in drawn:
+        if item.overflow:
+            add(ERROR, item, item.overflow)
         if item.box is None:
             continue
         left, top, right, bottom = item.box

@@ -46,8 +46,9 @@ headline and the running text are read from. The layout is an ordered list of el
 floor of the visible banner.
 
 `<prog> report` composes the banner and judges what was drawn (`rollups/rules.py`, each threshold
-with its source):
-- **Errors stop the build:**
+with its source). No finding stops a build: `build` always writes everything and prints the
+findings in a loud `!!` block.
+- **Errors** (expected to fail at the stand):
   - content outside the visible safe area
   - text or code below 500 mm
   - headline over 7 words, or over 35 words in all
@@ -55,6 +56,7 @@ with its source):
   - running x-height under distance/250
   - contrast under WCAG AA
   - QR narrower than 80 mm
+  - type that overflows its band (drawn anyway, at its smallest size)
 - **Warnings:**
   - logo below 1700 mm
   - QR centre outside 600–1500 mm
@@ -63,6 +65,11 @@ with its source):
 
 `build` writes the PDF (the whole data format), `preview.png` (the visible area) and `guides.png`
 (the hidden strips, the safety margin, the table zone and the eye-level band drawn in).
+
+**Every build, of every product, always writes what the code renders now** (`printing/report.py`).
+A judgement (a rule finding, type that overflows) is drawn as it falls and printed loudly; what
+cannot be drawn at all (a missing capture, picture or badge, a broken config) fails loudly and
+removes that unit's previous output, so a stale file is never left looking current.
 
 The PDF is RGB, which the listed shops convert themselves. CMYK with an ICC output intent and PDF/X
 would need pikepdf, plus an ECI profile that may be embedded but not redistributed, so it stays out

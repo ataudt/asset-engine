@@ -2,9 +2,8 @@
 
 Usage (``<prog>`` is the app's entry, e.g. FieldFix's ``python -m marketing.rollups``):
     <prog> report                       # compose every campaign x design, print the rule findings
-    <prog> build                        # ... and write PDF, preview and guides where no rule fails
-    <prog> build --draft                # write preview and guides even when a rule fails, no PDF
-    <prog> build --campaign rollup-messe-de --design blue --out ~/Desktop
+    <prog> build                        # ... and write PDF, preview and guides; findings are printed loudly
+    <prog> build --campaign rollup-messe-de --design documenting --out ~/Desktop
     <prog> links                        # (re)write the forwarding pages behind the QR codes
 
 Order of work for a print run: add the campaign, `links`, deploy the website, scan the code from
@@ -21,6 +20,7 @@ from PIL import Image, ImageDraw
 from asset_engine.printing.copy import CopyError
 from asset_engine.printing.links import LinkError, campaign_links, render_page, write_pages
 from asset_engine.printing.pdf import save_pdf
+from asset_engine.printing.report import Run, clear_outputs
 from asset_engine.project import get_project
 from asset_engine.rollups.compose import ComposedRollup, compose_rollup
 from asset_engine.rollups.config import RollupConfig, RollupConfigError, load_config
@@ -100,28 +100,25 @@ def _cmd_report(args: argparse.Namespace) -> int:
 def _cmd_build(args: argparse.Namespace) -> int:
     config = load_config()
     out_root = Path(args.out).expanduser() if args.out else config.default_out_dir
-    problems = 0
+    run = Run()
     for campaign_name in _split(args.campaign, [c.name for c in config.campaigns]):
         campaign = config.campaign(campaign_name)
         for design in _split(args.design, list(config.designs)):
             label = f"{campaign_name}/{design}"
-            designed, composed, findings = _compose(config, campaign_name, design)
-            for finding in findings:
-                print(f"     {finding}")
             out_dir = out_root / campaign_name / design
-            out_dir.mkdir(parents=True, exist_ok=True)
-            failing = errors(findings)
-            if not failing or args.draft:
-                visible = composed.image.crop(designed.sheet.visible_box)
-                _scaled(visible).save(out_dir / "preview.png", format="PNG")
-                guides(designed, composed).save(out_dir / "guides.png", format="PNG")
-            if failing:
-                print(f"FAIL {label}: {len(failing)} rule(s) fail — no PDF" + ("; draft previews written" if args.draft else ""))
-                problems += 1
-                continue
             pdf = out_dir / f"Rollup - {campaign.language.upper()} - {design}.pdf"
+            try:
+                designed, composed, findings = _compose(config, campaign_name, design)
+            except (RollupConfigError, LinkError, CopyError, FileNotFoundError) as error:
+                run.fail(label, str(error), clear_outputs([pdf, out_dir / "preview.png", out_dir / "guides.png"]))
+                continue
+            out_dir.mkdir(parents=True, exist_ok=True)
+            visible = composed.image.crop(designed.sheet.visible_box)
+            _scaled(visible).save(out_dir / "preview.png", format="PNG")
+            guides(designed, composed).save(out_dir / "guides.png", format="PNG")
             save_pdf([composed.image], pdf, dpi=designed.sheet.dpi)
             print(f"ok   {label}: {_relative(pdf)}")
+            run.warn(label, [str(finding) for finding in findings])
 
         stale = [
             _relative(link.page)
@@ -129,11 +126,15 @@ def _cmd_build(args: argparse.Namespace) -> int:
             if not link.page.is_file() or link.page.read_text(encoding="utf-8") != render_page(config, link, campaign.language)
         ]
         if stale:
-            print("     the QR codes point at pages that are missing or out of date:")
-            for path in stale:
-                print(f"       {path}")
-            print(f"     run `{config.links.command} links` and deploy the website before printing")
-    return 1 if problems else 0
+            run.warn(
+                f"{campaign_name} QR pages",
+                [
+                    "the QR codes point at pages that are missing or out of date:",
+                    *stale,
+                    f"run `{config.links.command} links` and deploy the website before printing",
+                ],
+            )
+    return run.summary()
 
 
 def _cmd_links(args: argparse.Namespace) -> int:
@@ -149,12 +150,11 @@ def build_parser(*, prog: str) -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
 
     report = commands.add_parser("report", help="compose and print the rule findings, write nothing")
-    build = commands.add_parser("build", help="render the print PDF, a preview and a guides image")
+    build = commands.add_parser("build", help="render the print PDF, a preview and a guides image, always")
     for sub in (report, build):
         sub.add_argument("--campaign", action="append", help="campaign name; repeatable, comma-separated")
         sub.add_argument("--design", action="append", help="design name; repeatable, comma-separated")
     build.add_argument("--out", help="output root (default: default_out_dir in the roll-up config)")
-    build.add_argument("--draft", action="store_true", help="write preview and guides even when a rule fails")
     report.set_defaults(func=_cmd_report)
     build.set_defaults(func=_cmd_build)
 

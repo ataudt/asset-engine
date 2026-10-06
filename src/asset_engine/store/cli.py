@@ -25,6 +25,9 @@ Rules:
     aggregates are one (``aggregate.py``).
   - Nothing is capped silently: captions with no slot in config.json are reported on every run, and
     a page's frame that resolved its capture from the default set's map says so (``default:<code>``).
+  - ``build`` always rewrites every frame it renders (``printing.report``): an overflowing caption is
+    drawn as it falls and named in a loud block, and a frame with no capture at all loses its
+    previous file, so what is in the tree is always what the code renders now.
 """
 
 from __future__ import annotations
@@ -64,6 +67,7 @@ from asset_engine.store.config import (
     device_names,
     load_config,
 )
+from asset_engine.printing.report import Run, clear_outputs
 from asset_engine.store.output import save_frame
 from asset_engine.project import get_project
 from asset_engine.store.render import layout_headline, render_slot
@@ -73,9 +77,9 @@ examples:
   {prog} build                      # every page, default first
   {prog} build --language de,en
   {prog} build --device phone
-  {prog} build --language de --device phone --force
+  {prog} build --language de --device phone
   {prog} build --variant default
-  {prog} build --variant <page>,<page> --force
+  {prog} build --variant <page>,<page>
   {prog} build --variant <page> --language de,en --dry-run
   {prog} compose --language de
   {prog} report
@@ -266,11 +270,10 @@ def _report_source(source: str, lang: str, slot: Slot, device: str) -> int:
     return 0
 
 
-def _compose_device(args: argparse.Namespace, device: str, variant: str) -> int:
-    """Write one page's text-free mockups for one device; returns the problem count."""
+def _compose_device(args: argparse.Namespace, device: str, variant: str, run: Run) -> None:
+    """Write one page's text-free mockups for one device, noting problems on ``run``."""
     config = load_config(device, _design(args), variant)
     languages = _languages(args, variant)
-    problems = 0
     for lang in languages:
         out_dir = _mockup_dir(args, config, str(lang))
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -279,26 +282,24 @@ def _compose_device(args: argparse.Namespace, device: str, variant: str) -> int:
             try:
                 mockup = compose_mockup(config, str(lang), slot)
             except RawCaptureError as error:
-                problems += 1
-                _log(str(error), language=lang, device=device, stderr=True)
+                run.fail(f"{lang}/{device} mockup {slot.caption}", str(error), clear_outputs([out_dir / slot.template]))
                 continue
             save_frame(mockup.image, out_dir / slot.template)
             written += 1
         _log(f"wrote {written} mockup(s) -> {out_dir}", language=lang, device=device)
-    return problems
 
 
 def _cmd_compose(args: argparse.Namespace) -> int:
     """Write the text-free mockups only — for reviewing artwork without the captions on top."""
-    variants = _variants(args)
-    problems = sum(
-        _compose_device(args, device, variant) for variant in variants for device in _devices(args)
-    )
-    return 1 if problems else 0
+    run = Run()
+    for variant in _variants(args):
+        for device in _devices(args):
+            _compose_device(args, device, variant, run)
+    return run.summary()
 
 
-def _build_device(args: argparse.Namespace, device: str, variant: str) -> int:
-    """Render one page's set on one device for every requested locale; returns the problem count."""
+def _build_device(args: argparse.Namespace, device: str, variant: str, run: Run) -> None:
+    """Render one page's set on one device for every requested locale, noting problems on ``run``."""
     config = load_config(device, _design(args), variant)
     languages = _languages(args, variant)
     captions_by_language = read_all_captions(languages, config)
@@ -307,7 +308,6 @@ def _build_device(args: argparse.Namespace, device: str, variant: str) -> int:
     ## has is named: its frame ships without, which is right until it is translated and wrong after.
     source_sublines = set(read_sublines(get_project().source_locale, config))
 
-    problems = 0
     for lang in languages:
         captions = captions_by_language[lang]
         sublines = read_sublines(lang, config)
@@ -328,10 +328,6 @@ def _build_device(args: argparse.Namespace, device: str, variant: str) -> int:
         for slot in config.slots:
             caption = captions[slot.caption - 1]
             dest = out_dir / slot.template
-            if dest.exists() and not args.force and not args.dry_run:
-                _log(f"skip (exists, use --force): {dest.name}", language=lang, device=device)
-                continue
-
             label = f"{lang}/{device} slot {slot.caption}"
             if args.dry_run:
                 ## Lay out against a throwaway canvas so --dry-run still validates fit and fonts.
@@ -343,19 +339,19 @@ def _build_device(args: argparse.Namespace, device: str, variant: str) -> int:
                 try:
                     _, source = _mockup_for(config, lang, slot)
                 except RawCaptureError as error:
-                    problems += 1
-                    _log(str(error), language=lang, device=device, stderr=True)
+                    run.fail(label, str(error))
                     continue
-                problems += _report_source(source, lang, slot, device)
+                if _report_source(source, lang, slot, device):
+                    run.fail(label, "no raw capture, not even in the fallbacks")
             else:
                 try:
                     mockup, source = _mockup_for(config, lang, slot)
                 except RawCaptureError as error:
-                    problems += 1
-                    _log(str(error), language=lang, device=device, stderr=True)
+                    run.fail(label, str(error), clear_outputs([dest]))
                     continue
-                problems += _report_source(source, lang, slot, device)
+                _report_source(source, lang, slot, device)
                 if mockup is None:
+                    run.fail(label, "no raw capture, not even in the fallbacks", clear_outputs([dest]))
                     continue
                 image, layout = render_slot(
                     mockup.image,
@@ -368,13 +364,12 @@ def _build_device(args: argparse.Namespace, device: str, variant: str) -> int:
                 )
 
             if layout.overflows:
-                problems += 1
-                _log(
-                    f"OVERFLOW slot {slot.caption}: {len(layout.lines)} lines at {layout.size}px "
-                    f"({layout.width}x{layout.height}px) — trim the caption",
-                    language=lang,
-                    device=device,
-                    stderr=True,
+                run.warn(
+                    label,
+                    [
+                        f"OVERFLOW: {len(layout.lines)} lines at {layout.size}px "
+                        f"({layout.width}x{layout.height}px) — trim the caption"
+                    ],
                 )
             if image is not None:
                 ## Format and encoder settings live in ``output.save_frame`` — every writer and
@@ -387,7 +382,6 @@ def _build_device(args: argparse.Namespace, device: str, variant: str) -> int:
             language=lang,
             device=device,
         )
-    return problems
 
 
 def _cmd_build(args: argparse.Namespace) -> int:
@@ -398,13 +392,12 @@ def _cmd_build(args: argparse.Namespace) -> int:
     ## frame it inherits would read here as a caption with no artwork.
     base = load_config(design=_design(args))
     _report_unmapped(base, len(read_captions(get_project().source_locale, base)))
-    problems = 0
+    run = Run()
     for variant in variants:
         _log(f"== {variant}")
-        problems += sum(_build_device(args, device, variant) for device in _devices(args))
-    if problems:
-        _log(f"{problems} slot(s) had a problem — see the lines above", stderr=True)
-    return 1 if problems else 0
+        for device in _devices(args):
+            _build_device(args, device, variant, run)
+    return run.summary()
 
 
 def _report_device(args: argparse.Namespace, device: str, variant: str) -> int:
@@ -459,17 +452,18 @@ def _cmd_feature_graphic(args: argparse.Namespace) -> int:
     config = load_config()
     languages = target_languages(_split_csv(args.language))
 
-    problems = 0
+    run = Run()
     for lang in languages:
+        dest = _out_dir(args, config, str(lang)) / FEATURE_GRAPHIC_NAME
+        label = f"{lang} feature graphic"
         try:
             headlines = read_headlines(lang, config)
         except (CaptionError, json.JSONDecodeError) as error:
-            problems += 1
-            _log(str(error), language=lang, stderr=True)
+            run.fail(label, str(error), clear_outputs([dest]))
             continue
 
         try:
-            image = compose_feature_graphic(
+            image, overflows = compose_feature_graphic(
                 headlines,
                 language=str(lang),
                 phone_language=args.phone_language or load_feature_config().capture_language,
@@ -477,19 +471,14 @@ def _cmd_feature_graphic(args: argparse.Namespace) -> int:
                 label=str(lang),
             )
         except (FeatureGraphicError, RawCaptureError) as error:
-            problems += 1
-            _log(str(error), language=lang, stderr=True)
+            run.fail(label, str(error), clear_outputs([dest]))
             continue
 
-        out_dir = _out_dir(args, config, str(lang))
-        out_dir.mkdir(parents=True, exist_ok=True)
-        dest = out_dir / FEATURE_GRAPHIC_NAME
+        dest.parent.mkdir(parents=True, exist_ok=True)
         save_frame(image, dest)
         _log(f"wrote {dest}", language=lang)
-
-    if problems:
-        _log(f"{problems} locale(s) did not render — see above", stderr=True)
-    return 1 if problems else 0
+        run.warn(label, [f"OVERFLOW: {overflow} — trim the copy" for overflow in overflows])
+    return run.summary()
 
 
 def _add_language_arg(parser: argparse.ArgumentParser) -> None:
@@ -565,7 +554,6 @@ def build_parser(
     _add_design_arg(build)
     _add_variant_arg(build)
     build.add_argument("--out", metavar="DIR", help="Output root (default: config default_out_dir).")
-    build.add_argument("--force", action="store_true", help="Overwrite existing output files.")
     build.add_argument("--dry-run", action="store_true", help="Check fit, fonts and captures; write nothing.")
     build.set_defaults(func=_cmd_build)
 
