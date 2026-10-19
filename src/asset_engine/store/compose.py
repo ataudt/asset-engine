@@ -535,6 +535,10 @@ def _rounded(layer: Image.Image, radius: int) -> Image.Image:
     return layer
 
 
+## The public name for what a profile banner's app tile is cut with.
+rounded_corners = _rounded
+
+
 def callout_layer(capture_path: Path, callout: Callout, style: ChipStyle, shown: str) -> Image.Image:
     """``callout``'s rectangle of the raw capture, scaled to its width, corners rounded.
 
@@ -711,5 +715,6 @@ __all__ = [
     "ground_window",
     "raw_path",
     "resolve_capture",
+    "rounded_corners",
     "shadow_for",
 ]

@@ -25,7 +25,7 @@ dev = ["pytest"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-asset_engine = ["rollups/printers.json"]
+asset_engine = ["rollups/printers.json", "banners/platforms.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

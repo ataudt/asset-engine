@@ -9,7 +9,7 @@ Rules:
     set, the brand faces, the words a chip prints and the store pages (``PageRegistry``).
   - Each product is a section an app may leave out — an app with no store set has ``store=None``.
     Asking for a section the app did not give is an error naming it (``store_files()``,
-    ``flyer_files()``, ``rollup_files()``), never a guess; the fields themselves are ``None``.
+    ``flyer_files()``, ``rollup_files()``, ``banner_files()``), never a guess; the fields themselves are ``None``.
   - One project per process, installed at startup by ``set_project``; ``get_project`` raises until
     then rather than guessing one. The app's own package installs it, so every entry into the engine
     from that app passes through it.
@@ -72,7 +72,8 @@ class StoreFiles:
 
 @dataclass(frozen=True)
 class PrintFiles:
-    """A printed product: its layout file and its copy, one JSON file per language."""
+    """A product laid out from one file, with its copy in one JSON file per language: a flyer, a
+    roll-up, a profile banner."""
 
     config: Path
     copy_dir: Path
@@ -94,6 +95,7 @@ class AssetProject:
     store: StoreFiles | None = None
     flyers: PrintFiles | None = None
     rollups: PrintFiles | None = None
+    banners: PrintFiles | None = None
 
     def store_files(self) -> StoreFiles:
         return _required(self.store, "store")
@@ -103,6 +105,9 @@ class AssetProject:
 
     def rollup_files(self) -> PrintFiles:
         return _required(self.rollups, "rollups")
+
+    def banner_files(self) -> PrintFiles:
+        return _required(self.banners, "banners")
 
 
 def _required(section, name: str):

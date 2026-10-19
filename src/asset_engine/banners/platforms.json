@@ -1,0 +1,43 @@
+{
+  "_comment": [
+    "Profile-banner formats and the parts of them a platform covers or crops, as design guides state",
+    "them. These are facts about a platform, not about an app, which is why they live in the engine: an",
+    "app's banner config names one by key. Lengths are pixels of the canvas the platform asks for.",
+    "`zones` are what the rules judge: a `keep-out` box is covered (the profile photo), a `keep-in` box",
+    "is what survives the narrowest crop. `photos` are the round profile photo as the guides preview",
+    "draws it, centre and diameter. Where sources disagree the most cautious figure is taken and the",
+    "others are named. A new platform gets an entry here, with the URLs and the date read."
+  ],
+  "linkedin-profile": {
+    "_source": [
+      "LinkedIn Help publishes no pixel figures for the personal cover image: https://www.linkedin.com/help/linkedin/answer/a7145577 (read 2026-10-19)",
+      "https://rightblogger.com/blog/linkedin-banner-size (read 2026-10-19)",
+      "https://www.zeliq.com/blog/linkedin-desktop-banner (read 2026-10-19)",
+      "https://contentin.io/blog/linkedin-banner-size/ (read 2026-10-19)",
+      "https://www.screensnap.pro/es/blog/linkedin-banner-size-guide (read 2026-10-19)",
+      "https://socialrails.com/sizes/linkedin/cover (read 2026-10-19)",
+      "https://www.lilachbullock.com/?p=110408 (read 2026-10-19)"
+    ],
+    "_note": [
+      "Canvas 1584 x 396 (4:1) in every source; JPG or PNG, 8 MB. Desktop: the round photo sits bottom-left,",
+      "about 210 px across at banner scale, 30-40 px from the left edge, its upper half over the banner;",
+      "guides give the covered area as 152-568 px wide, so the keep-out is widened to x < 450, y > 180.",
+      "Mobile: the sides are cropped by 60 px (ScreenSnap) to 317 px (contentin.io, centre 60 % visible),",
+      "and about 44 px top and bottom (Zeliq, 22 % of the height); the narrowest is the keep-in. Where the",
+      "photo sits on mobile the sources disagree (bottom-left and larger: contentin.io, MagicStudio; bottom",
+      "centre: Zeliq, SocialRails, RightBlogger), so both are kept out."
+    ],
+    "canvas": [1584, 396],
+    "zones": {
+      "desktop-photo": {"kind": "keep-out", "box": [0, 180, 450, 396]},
+      "mobile-photo-left": {"kind": "keep-out", "box": [250, 246, 550, 396]},
+      "mobile-photo-centre": {"kind": "keep-out", "box": [692, 244, 892, 396]},
+      "mobile-visible": {"kind": "keep-in", "box": [317, 44, 1267, 352]}
+    },
+    "photos": {
+      "desktop": {"center": [145, 335], "diameter": 210},
+      "mobile": {"center": [400, 396], "diameter": 300}
+    },
+    "mobile_view": "mobile-visible"
+  }
+}

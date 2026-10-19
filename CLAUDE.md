@@ -1,8 +1,9 @@
 # asset-engine — agent notes
 
-The shared renderer for store screenshots, the Play feature graphic, print flyers and trade-fair
-roll-ups. It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
-(roll-ups) install it, and nothing is copied back and forth. Interpreter:
+The shared renderer for store screenshots, the Play feature graphic, print flyers, trade-fair
+roll-ups and profile banners. It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
+(roll-ups) install it, `Apps/brand/` (profile banners) runs on this venv, and nothing is copied
+back and forth. Interpreter:
 `~/.pyenv/versions/asset-engine/bin/python`. Both apps' venvs have it installed editable, so an edit
 here is live there. Public on GitHub as `ataudt/asset-engine`; an app's `setup.py` pins a tag.
 
@@ -33,6 +34,9 @@ outputs in the apps (website screens, share cards) depend on it.
 - `rollups/printers.json` holds print-shop data formats exactly as the shop's data sheet states
   them, with the URL and the date read. A new shop is a new entry read off its data sheet. Never
   adjust one shop's numbers to fit another: the formats are not interchangeable.
+- `banners/platforms.json` holds a platform's banner canvas and the zones its profile photo covers
+  and its phone view crops, with the guides' URLs and the date read. LinkedIn publishes no figures,
+  so the guides disagree; the file keeps the most cautious and names the rest.
 - `rollups/rules.py` thresholds each name their source. A threshold changes because a better source
   says so, not because a layout fails it. A failing layout is fixed in the app's config.
 - **No build withholds output.** Findings and overflowing type are drawn and printed loudly;
@@ -41,6 +45,7 @@ outputs in the apps (website screens, share cards) depend on it.
 
 # Before changing an API
 
+`Apps/brand/` (profile banners) runs `asset_engine.banners` through `python -m marketing.banners`.
 FieldFix (roll-ups) runs `asset_engine.rollups` through `python -m marketing.rollups`; after a
 change there, run `~/.pyenv/versions/fieldfix/bin/python -m pytest marketing/rollups` from
 `FieldFix-App/`. NutriSpy imports these modules directly (`asset_engine.store.config`, `.compose`, `.captions`,
