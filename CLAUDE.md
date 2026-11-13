@@ -1,7 +1,7 @@
 # asset-engine — agent notes
 
 The shared renderer for store screenshots, the Play feature graphic, print flyers, trade-fair
-roll-ups and profile banners. It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
+roll-ups, profile banners and app icons. It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
 (roll-ups) install it, `Apps/brand/` (profile banners) runs on this venv, and nothing is copied
 back and forth. Interpreter:
 `~/.pyenv/versions/asset-engine/bin/python`. Both apps' venvs have it installed editable, so an edit
@@ -16,6 +16,8 @@ here is live there. Public on GitHub as `ataudt/asset-engine`; an app's `setup.p
   `get_project().root`.
 - The engine never imports an app. What it needs to ask (store pages, chip words) is a method on
   `PageRegistry` or a callable on `AssetProject`.
+- The engine holds no credentials and reads no `.env`. A model client is built by the app from its
+  own secrets and handed over as a callable (`LogoFiles.google_client`).
 
 # Output is a function of its inputs
 
@@ -28,12 +30,17 @@ outputs in the apps (website screens, share cards) depend on it.
   directory and comparing hashes. Do not check it by rebuilding an app's committed tree.
 - Pillow and segno are pinned exactly in `pyproject.toml`. Raise a pin only as a deliberate,
   pixel-changing release.
+- `logos generate` is the one step that is not a function of its inputs. It writes only into a fresh
+  drafts directory; a draft becomes an input when the app commits it as its `master`, and `build`
+  derives the icon set from that with Pillow alone.
 
 # Print formats and roll-up rules are facts with sources
 
 - `rollups/printers.json` holds print-shop data formats exactly as the shop's data sheet states
   them, with the URL and the date read. A new shop is a new entry read off its data sheet. Never
   adjust one shop's numbers to fit another: the formats are not interchangeable.
+- `logos/platforms.json` holds each icon target's size, layer and the circle no platform mask clips,
+  read off Apple's, Android's, Play's, Expo's and Google Search's guides, with the date read.
 - `banners/platforms.json` holds a platform's banner canvas and the zones its profile photo covers
   and its phone view crops, with the guides' URLs and the date read. LinkedIn publishes no figures,
   so the guides disagree; the file keeps the most cautious and names the rest.

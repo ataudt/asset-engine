@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asset-engine"
-version = "0.1.2"
-description = "Store screenshots, Play feature graphics, print flyers and trade-fair roll-ups, composed from an app's own definitions"
+version = "0.2.0"
+description = "Store screenshots, Play feature graphics, print flyers, trade-fair roll-ups, profile banners and app icons, composed from an app's own definitions"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -20,12 +20,15 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# Drawing app-icon drafts. Not pinned exactly: a draft is not a reproducible output, and the icon set
+# is derived from the committed master with Pillow alone. The client is built by the app.
+logos = ["google-genai>=2.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-asset_engine = ["rollups/printers.json", "banners/platforms.json"]
+asset_engine = ["rollups/printers.json", "banners/platforms.json", "logos/platforms.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

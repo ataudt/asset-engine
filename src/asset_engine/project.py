@@ -7,9 +7,11 @@ Rules:
     the code is shared between apps and the definitions are not.
   - What the engine cannot know is asked of the project, never imported from the app: the locale
     set, the brand faces, the words a chip prints and the store pages (``PageRegistry``).
+  - The engine holds no credentials and reads no ``.env``. A model client is built by the app, from
+    its own secrets, and handed over as a callable (``LogoFiles.google_client``).
   - Each product is a section an app may leave out — an app with no store set has ``store=None``.
     Asking for a section the app did not give is an error naming it (``store_files()``,
-    ``flyer_files()``, ``rollup_files()``, ``banner_files()``), never a guess; the fields themselves are ``None``.
+    ``flyer_files()``, ``rollup_files()``, ``banner_files()``, ``logo_files()``), never a guess; the fields themselves are ``None``.
   - One project per process, installed at startup by ``set_project``; ``get_project`` raises until
     then rather than guessing one. The app's own package installs it, so every entry into the engine
     from that app passes through it.
@@ -20,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 
 class PageRegistry:
@@ -80,6 +83,17 @@ class PrintFiles:
 
 
 @dataclass(frozen=True)
+class LogoFiles:
+    """App icons: drafts drawn by an image model from a description, and the icon set derived from
+    the draft the app chose as its master."""
+
+    config: Path
+    ## Vertex location (from the logo config) -> a ready ``google.genai.Client``. The app builds it
+    ## from its own credentials; ``Any`` so this module imports without the ``logos`` extra.
+    google_client: Callable[[str], Any]
+
+
+@dataclass(frozen=True)
 class AssetProject:
     """Everything an app hands the engine. Paths are absolute."""
 
@@ -96,6 +110,7 @@ class AssetProject:
     flyers: PrintFiles | None = None
     rollups: PrintFiles | None = None
     banners: PrintFiles | None = None
+    logos: LogoFiles | None = None
 
     def store_files(self) -> StoreFiles:
         return _required(self.store, "store")
@@ -108,6 +123,9 @@ class AssetProject:
 
     def banner_files(self) -> PrintFiles:
         return _required(self.banners, "banners")
+
+    def logo_files(self) -> LogoFiles:
+        return _required(self.logos, "logos")
 
 
 def _required(section, name: str):
@@ -134,4 +152,4 @@ def get_project() -> AssetProject:
     return _PROJECT
 
 
-__all__ = ["AssetProject", "PageRegistry", "PrintFiles", "StoreFiles", "get_project", "set_project"]
+__all__ = ["AssetProject", "LogoFiles", "PageRegistry", "PrintFiles", "StoreFiles", "get_project", "set_project"]

@@ -1,0 +1,122 @@
+{
+  "_comment": [
+    "App-icon targets as the platforms' guides state them. These are facts about a platform, not about an",
+    "app, which is why they live in the engine: an app's logo config names a target by key and says where",
+    "the file goes. `size` is the square's edge in pixels. `layer` is what the file holds: `full` (the",
+    "motif over the background colour, opaque), `foreground` (the motif alone, transparent), `background`",
+    "(the background colour alone) or `monochrome` (the motif's silhouette in white, transparent).",
+    "`safe_circle` is the diameter, as a fraction of `size`, of the centred circle no platform mask ever",
+    "clips: every pixel of the motif stays inside it. `viewport` is the centred fraction of the square a",
+    "device shows before its own mask, and `masks` the shapes the guides sheet previews it under. A new",
+    "target gets an entry here, with the URLs and the date read."
+  ],
+  "ios-app-store": {
+    "_source": [
+      "https://developer.apple.com/design/human-interface-guidelines/app-icons (read 2026-11-13)",
+      "https://docs.expo.dev/develop/user-interface/splash-screen-and-app-icon/ (read 2026-11-13)"
+    ],
+    "_note": [
+      "1024 x 1024 px, square; the system masks the corners, so the file is unmasked. Expo: 'Make sure the",
+      "icon fills the whole square, with no rounded corners or other transparent pixels'. Apple gives no",
+      "safe area in figures, only 'keep primary content centered', so the safe circle is the inscribed one;",
+      "how large the motif sits inside it is the app's `fill`. Apple publishes no corner curve; the guides",
+      "preview approximates it with a superellipse."
+    ],
+    "size": 1024,
+    "layer": "full",
+    "safe_circle": 1.0,
+    "viewport": 1.0,
+    "masks": ["superellipse"]
+  },
+  "play-store": {
+    "_source": [
+      "https://developer.android.com/google-play/resources/icon-design-specifications (read 2026-11-13)"
+    ],
+    "_note": [
+      "512 x 512 px, 32-bit PNG, sRGB, full square; Play applies the mask itself, a corner radius of 30 % of",
+      "the icon size, and its own shadow. A transparent asset shows Play's UI colour, so the file is opaque.",
+      "The inscribed circle lies inside a square rounded by 30 %, so it is the safe circle."
+    ],
+    "size": 512,
+    "layer": "full",
+    "safe_circle": 1.0,
+    "viewport": 1.0,
+    "masks": ["rounded-30"]
+  },
+  "android-adaptive-foreground": {
+    "_source": [
+      "https://developer.android.com/develop/ui/views/launch/icon_design_adaptive (read 2026-11-13)",
+      "https://docs.expo.dev/develop/user-interface/splash-screen-and-app-icon/ (read 2026-11-13)"
+    ],
+    "_note": [
+      "Every layer is 108 x 108 dp; the outer 18 dp per side are reserved for the mask and for parallax, so",
+      "a device shows the inner 72 dp. The logo 'must not exceed 66x66 dp', the zone 'never clipped by a",
+      "shaped mask defined by an OEM' (Figure 4 draws it as a 66 dp circle). Expo asks for at least 512 px;",
+      "1024 px stands for 108 dp."
+    ],
+    "size": 1024,
+    "layer": "foreground",
+    "safe_circle": 0.6111,
+    "viewport": 0.6667,
+    "masks": ["circle", "superellipse", "rounded-30"]
+  },
+  "android-adaptive-background": {
+    "_source": [
+      "https://developer.android.com/develop/ui/views/launch/icon_design_adaptive (read 2026-11-13)",
+      "https://docs.expo.dev/develop/user-interface/splash-screen-and-app-icon/ (read 2026-11-13)"
+    ],
+    "_note": [
+      "Same 108 dp square as the foreground; Expo: 'Make sure that it has the same dimensions as your",
+      "foreground image'. An app that sets only `backgroundColor` in its Expo config needs no file."
+    ],
+    "size": 1024,
+    "layer": "background",
+    "safe_circle": 0.6111,
+    "viewport": 0.6667,
+    "masks": ["circle"]
+  },
+  "android-adaptive-monochrome": {
+    "_source": [
+      "https://developer.android.com/develop/ui/views/launch/icon_design_adaptive (read 2026-11-13)"
+    ],
+    "_note": [
+      "The themed-icon layer (Android 13+): one layer the launcher tints from the wallpaper, so only its",
+      "alpha counts. Same 108 dp square and 66 dp safe zone as the foreground (Figure 6)."
+    ],
+    "size": 1024,
+    "layer": "monochrome",
+    "safe_circle": 0.6111,
+    "viewport": 0.6667,
+    "masks": ["circle"]
+  },
+  "splash-icon": {
+    "_source": [
+      "https://developer.android.com/develop/ui/views/launch/splash-screen (read 2026-11-13)",
+      "https://docs.expo.dev/develop/user-interface/splash-screen-and-app-icon/ (read 2026-11-13)"
+    ],
+    "_note": [
+      "Expo: 'Use a 1024x1024 image' with 'a transparent background'. Android 12+: an icon without an icon",
+      "background 'must be 288x288 dp and fit within a circle 192 dp in diameter'; everything outside the",
+      "circle is masked. 192 / 288 = 2/3."
+    ],
+    "size": 1024,
+    "layer": "foreground",
+    "safe_circle": 0.6667,
+    "viewport": 0.6667,
+    "masks": ["circle"]
+  },
+  "favicon": {
+    "_source": [
+      "https://developers.google.com/search/docs/appearance/favicon-in-search (read 2026-11-13)"
+    ],
+    "_note": [
+      "Square, at least 8 x 8 px; Google 'recommend[s] using a favicon that's larger than 48x48px', so 96.",
+      "Browsers draw it unmasked; opaque so it reads on light and dark tab bars alike."
+    ],
+    "size": 96,
+    "layer": "full",
+    "safe_circle": 1.0,
+    "viewport": 1.0,
+    "masks": []
+  }
+}

@@ -7,6 +7,7 @@ Renders the image assets every app in this workspace needs from the app's own de
 - **Print flyers**: laid out in millimetres with bleed, with QR codes and the forwarding pages behind them.
 - **Trade-fair roll-ups**: in a print shop's exact data format, composed from an element list and checked against the rules that decide whether a banner works at a stand.
 - **Profile banners** (LinkedIn 1584×396): composed from an element list and checked against where the platform covers it with the profile photo or crops it on phones.
+- **App icons**: drafts drawn by an image model from a description, and every platform's icon file (iOS, Play, Android adaptive layers, splash, favicon) derived from the draft the app chose.
 
 The engine is the code. The definitions stay in the app's repo: layouts as JSON, captions per
 locale, the plain app captures, the brand faces and the store pages. The app hands them over as an
@@ -15,7 +16,7 @@ locale, the plain app captures, the brand faces and the store pages. The app han
 ## Using it from an app
 
 1. Install it into the app's virtualenv: `pip install -e ../asset-engine`. Once the engine is published, pin a tag in the app instead (`asset-engine @ git+https://github.com/ataudt/asset-engine.git@vX.Y.Z`).
-2. Build an `AssetProject` (`asset_engine.project`) with the app's root, faces, locales and pages, plus one section per product it has: `store=StoreFiles(...)`, `flyers=PrintFiles(...)`, `rollups=PrintFiles(...)`, `banners=PrintFiles(...)`. Call `set_project()` once at startup. NutriSpy does this in `marketing/asset_adapter.py` (store set and flyers), FieldFix in its own (roll-ups only). Both install it from `marketing/__init__.py`.
+2. Build an `AssetProject` (`asset_engine.project`) with the app's root, faces, locales and pages, plus one section per product it has: `store=StoreFiles(...)`, `flyers=PrintFiles(...)`, `rollups=PrintFiles(...)`, `banners=PrintFiles(...)`, `logos=LogoFiles(...)`. Call `set_project()` once at startup. NutriSpy does this in `marketing/asset_adapter.py` (store set and flyers), FieldFix in its own (roll-ups only). Both install it from `marketing/__init__.py`.
 3. Give each CLI an entry point in the app. The entry passes its own `prog` and may add commands of its own:
 
    ```python
@@ -39,6 +40,7 @@ it.
 | `asset_engine.flyers` | the two-page A6 flyer, CLI |
 | `asset_engine.rollups` | print-shop formats (`printers.json`), the element list (`config`, `compose`), the rules (`rules`), CLI |
 | `asset_engine.banners` | platform formats and their photo and crop zones (`platforms.json`), the element list (`config`, `compose`), the zone checks (`rules`), CLI |
+| `asset_engine.logos` | icon targets and their safe circles (`platforms.json`), the app's logo config (`config`), the draft prompt (`prompt`), drafts from the app's image model (`generate`), the icon set from the master (`derive`), CLI |
 
 ## Roll-ups
 
@@ -88,6 +90,51 @@ placements) and inside the narrowest phone crop, except across edges they `bleed
 `build --guides` also writes a sheet showing the zones, the desktop profile and the phone crop with
 the photo drawn over each. The zones come from design guides that disagree; the most cautious figure
 is used and the others are named in the file.
+
+## App icons
+
+Three steps, of which only the first is not reproducible:
+
+1. `<prog> generate "a fox curled into a circle" -n 4` asks the app's image model for drafts and writes
+   them, with a `run.json` holding the prompt and each call's outcome, into a fresh
+   `<default_out_dir>/drafts/<time>/`. `--from <draft.png> "thicker lines"` revises a draft instead.
+2. Copy the draft you want to the `master` path of the logo config and commit it. From here on it is
+   an input like any other.
+3. `<prog> build` derives every target from the master and writes it to the path the config gives;
+   `--out DIR` writes `<target>.png` there instead, `--guides` adds `guides.png` (each target with
+   its safe circle and viewport, and under the platforms' masks).
+
+The drafts are drawn on a flat `key_color`, which `build` cuts away. Models paint it only roughly, so
+the key cut is the median of the master's border, and a border far from `key_color` is reported. Each
+target places the motif by its bounding circle at `fill` (per target: `fill_by_target`) of the
+platform's safe circle, from `platforms.json` with its sources.
+
+**Credentials stay in the app.** The engine reads none: the app's `LogoFiles.google_client` is called
+with the configured Vertex location and returns a ready `google.genai.Client`, built from the app's own
+secrets. The client library is the `logos` extra (`pip install -e '../asset-engine[logos]'`).
+
+```json
+{
+  "model": "gemini-3-pro-image",
+  "location": "global",
+  "key_color": "#FF00FF",
+  "background": "#14213D",
+  "fill": 0.86,
+  "fill_by_target": {"ios-app-store": 0.72, "play-store": 0.72},
+  "style": "Warm, calm and modern; two or three colours.",
+  "master": "assets/logo/master.png",
+  "default_out_dir": "out/logos",
+  "targets": {
+    "ios-app-store": "assets/icon.png",
+    "android-adaptive-foreground": "assets/android-icon-foreground.png",
+    "android-adaptive-monochrome": "assets/android-icon-monochrome.png",
+    "splash-icon": "assets/splash-icon.png"
+  }
+}
+```
+
+Vertex serves the Gemini image models in `global` and `us-central1` only, not in an EU region. A logo
+description holds no user data.
 
 ## Development
 
