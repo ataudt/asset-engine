@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asset-engine"
-version = "0.2.0"
-description = "Store screenshots, Play feature graphics, print flyers, trade-fair roll-ups, profile banners and app icons, composed from an app's own definitions"
+version = "0.3.0"
+description = "Store screenshots, Play feature graphics, App Store creative assets, print flyers, trade-fair roll-ups, profile banners and app icons, composed from an app's own definitions"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -28,7 +28,7 @@ logos = ["google-genai>=2.0"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-asset_engine = ["rollups/printers.json", "banners/platforms.json", "logos/platforms.json"]
+asset_engine = ["rollups/printers.json", "banners/platforms.json", "logos/platforms.json", "store/app_store_creatives.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

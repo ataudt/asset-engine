@@ -61,7 +61,8 @@ class PageRegistry:
 @dataclass(frozen=True)
 class StoreFiles:
     """The store set: geometry, the caption -> capture map, page artwork and the dishes a frame may
-    show. ``dishes`` may name a file holding ``{}`` for an app whose frames show no food."""
+    show. ``dishes`` may name a file holding ``{}`` for an app whose frames show no food. The
+    feature graphic and the App Store creatives stand on the same pieces."""
 
     screenshots_config: Path
     captures: Path
@@ -71,6 +72,11 @@ class StoreFiles:
     ## ``language -> nested table`` a chip's name is looked up in: a dotted key walks it one level
     ## per part, as in NutriSpy's ``frontend/locales/<lang>/data.json``.
     labels: Callable[[str], dict]
+    ## The App Store creative assets' layout (``store.creatives``); ``None`` for an app without.
+    creatives: Path | None = None
+
+    def creatives_config(self) -> Path:
+        return _required(self.creatives, "store.creatives")
 
 
 @dataclass(frozen=True)

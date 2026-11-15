@@ -1,7 +1,7 @@
 # asset-engine — agent notes
 
-The shared renderer for store screenshots, the Play feature graphic, print flyers, trade-fair
-roll-ups, profile banners and app icons. It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
+The shared renderer for store screenshots, the Play feature graphic, App Store creative assets,
+print flyers, trade-fair roll-ups, profile banners and app icons. It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
 (roll-ups) install it, `Apps/brand/` (profile banners) runs on this venv, and nothing is copied
 back and forth. Interpreter:
 `~/.pyenv/versions/asset-engine/bin/python`. Both apps' venvs have it installed editable, so an edit
@@ -41,6 +41,9 @@ outputs in the apps (website screens, share cards) depend on it.
   adjust one shop's numbers to fit another: the formats are not interchangeable.
 - `logos/platforms.json` holds each icon target's size, layer and the circle no platform mask clips,
   read off Apple's, Android's, Play's, Expo's and Google Search's guides, with the date read.
+- `store/app_store_creatives.json` holds each App Store creative placement's accepted sizes, aspect,
+  art safe area and formats exactly as Apple's specification states them, with the URL and the date
+  read. A layout that reaches past the safe area is fixed in the app's `creatives.json`.
 - `banners/platforms.json` holds a platform's banner canvas and the zones its profile photo covers
   and its phone view crops, with the guides' URLs and the date read. LinkedIn publishes no figures,
   so the guides disagree; the file keeps the most cautious and names the rest.

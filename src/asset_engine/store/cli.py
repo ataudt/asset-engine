@@ -23,6 +23,9 @@ Rules:
     an app's metadata builder does. A page and a design together are refused.
   - An app adds commands of its own through ``build_parser(extend=...)``; NutriSpy's caption
     aggregates are one (``aggregate.py``).
+  - ``creatives`` renders the App Store creative assets (``creatives``) into the same
+    ``<set>/<lang>/`` folder as the frames, always overwriting, as ``feature-graphic`` does; its
+    ``--guides`` sheets go beside the sets, never into a folder files are uploaded from.
   - Nothing is capped silently: captions with no slot in config.json are reported on every run, and
     a page's frame that resolved its capture from the default set's map says so (``default:<code>``).
   - A frame ``build`` renders is never withheld for a finding (``printing.report``): an overflowing
@@ -53,6 +56,13 @@ from asset_engine.store.compose import (
     compose_mockup,
     resolve_capture,
 )
+from asset_engine.store.creatives import (
+    CreativeError,
+    compose_creative,
+    guides as creative_guides,
+    load_creatives_config,
+    save_creative,
+)
 from asset_engine.store.feature_graphic import (
     FeatureGraphicError,
     compose_feature_graphic,
@@ -67,6 +77,7 @@ from asset_engine.store.config import (
     load_config,
 )
 from asset_engine.printing.report import Run, clear_outputs
+from asset_engine.store.fonts import FontCoverageError
 from asset_engine.store.output import save_frame
 from asset_engine.project import get_project
 from asset_engine.store.render import layout_headline, render_slot
@@ -83,6 +94,8 @@ examples:
   {prog} compose --language de
   {prog} report
   {prog} feature-graphic --language en,de
+  {prog} creatives --language de,en --guides
+  {prog} creatives --placement search-results
 """
 
 def _split_csv(values: list[str] | None) -> list[str]:
@@ -488,6 +501,45 @@ def _cmd_feature_graphic(args: argparse.Namespace) -> int:
     return run.summary()
 
 
+## Beside the rendered sets, like the mockups: a guides sheet is for reviewing a layout and must never
+## sit in a folder a metadata builder or a person uploading by hand picks files from.
+CREATIVE_GUIDES_ROOT_NAME = "_creative_guides"
+
+
+def _cmd_creatives(args: argparse.Namespace) -> int:
+    """Render the App Store creative assets (header, search results, universal) per locale."""
+    config = load_config()
+    creatives = load_creatives_config()
+    names = _split_csv(args.placement) or list(creatives.placements)
+    unknown = [name for name in names if name not in creatives.placements]
+    if unknown:
+        raise SystemExit(f"unknown placement(s): {', '.join(unknown)} — creatives.json lays out {', '.join(creatives.placements)}")
+    languages = target_languages(_split_csv(args.language))
+    guides_root = (Path(args.out).resolve() if args.out else config.default_out_dir) / CREATIVE_GUIDES_ROOT_NAME
+
+    run = Run()
+    for lang in languages:
+        for name in names:
+            dest = _out_dir(args, config, str(lang)) / creatives.file_name(name, language=str(lang), set_name=config.out_subdir)
+            guides_path = guides_root / str(lang) / f"{dest.stem}_guides.png"
+            label = f"{lang} {name}"
+            try:
+                composed = compose_creative(creatives.placement(name), str(lang), screenshots=config)
+            except (CaptionError, CreativeError, RawCaptureError, FontCoverageError, json.JSONDecodeError) as error:
+                run.fail(label, str(error), clear_outputs([dest, guides_path]))
+                continue
+
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            save_creative(composed.image, dest)
+            _log(f"wrote {dest} ({composed.image.width}x{composed.image.height})", language=lang)
+            if args.guides:
+                guides_path.parent.mkdir(parents=True, exist_ok=True)
+                creative_guides(composed).save(guides_path, format="PNG")
+                _log(f"guides {guides_path}", language=lang)
+            run.warn(label, composed.findings)
+    return run.summary()
+
+
 def _add_language_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--language",
@@ -598,6 +650,26 @@ def build_parser(
              "headlines are localized).",
     )
     feature.set_defaults(func=_cmd_feature_graphic)
+
+    creatives = sub.add_parser(
+        "creatives",
+        help="Render the App Store creative assets (product page header, search results, universal) per locale.",
+    )
+    _add_language_arg(creatives)
+    creatives.add_argument(
+        "--placement",
+        action="append",
+        metavar="NAME",
+        help="Placement in creatives.json; repeatable and comma-separated. Default: every one it lays out.",
+    )
+    creatives.add_argument("--out", metavar="DIR", help="Output root (default: config default_out_dir).")
+    creatives.add_argument(
+        "--guides",
+        action="store_true",
+        help=f"Also write a guides sheet per creative (Apple's art safe area, the elements' boxes) "
+             f"under {CREATIVE_GUIDES_ROOT_NAME}/<lang>/ beside the rendered sets.",
+    )
+    creatives.set_defaults(func=_cmd_creatives)
 
     if extend is not None:
         extend(sub)

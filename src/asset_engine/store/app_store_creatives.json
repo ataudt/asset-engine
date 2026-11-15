@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "The App Store's creative assets (iOS 27 / iPadOS 27 and later), exactly as Apple's specification",
+    "states them. These are facts about the store, not about an app, which is why they live in the",
+    "engine: an app's creatives.json names a placement by key and lays it out. A new placement or a",
+    "changed figure is read off Apple's page, with the URL and the date read, never fitted to a layout.",
+    "`min` and `max` are the sizes Apple accepts; where they differ any size between them at `aspect` is",
+    "taken. `art_safe_area` is Apple's box as stated, `origin` its top-left and `size` its extent, in",
+    "the pixels of `reference` (the size Apple states it for); on another accepted size it scales with",
+    "the width. Everything a person must see stays inside it: Apple crops the rest across devices and",
+    "orientations, and the area around it is for atmospheric art only (`Auxiliary Art Area`).",
+    "None of the images may carry an alpha channel or transparency. `formats` are the extensions",
+    "Apple takes; the universal asset is PNG only."
+  ],
+  "_source": [
+    "https://developer.apple.com/help/app-store-connect/reference/app-information/creative-assets-specifications (read 2026-11-15)",
+    "https://developer.apple.com/app-store/asset-best-practices/ (read 2026-11-15)"
+  ],
+  "header": {
+    "_note": "Product page header. One image for the top of the product page.",
+    "aspect": [21, 9],
+    "reference": [3840, 1646],
+    "min": [3840, 1646],
+    "max": [3840, 1646],
+    "art_safe_area": {"origin": [1097, 493], "size": [1646, 661]},
+    "formats": ["jpeg", "png"]
+  },
+  "search-results": {
+    "_note": "Search results. Apple gives the safe area for the maximum size only (\"Max: 2168 x 1030\").",
+    "aspect": [3, 2],
+    "reference": [3840, 2560],
+    "min": [1920, 1280],
+    "max": [3840, 2560],
+    "art_safe_area": {"origin": [836, 765], "size": [2168, 1030]},
+    "formats": ["jpeg", "png"]
+  },
+  "universal": {
+    "_note": "One asset Apple uses for both the header and the search results, and in hero placements on the App Store and Games tabs, which is why it requires PNG.",
+    "aspect": [16, 9],
+    "reference": [5244, 2950],
+    "min": [5244, 2950],
+    "max": [5244, 2950],
+    "art_safe_area": {"origin": [1921, 660], "size": [1402, 962]},
+    "formats": ["png"]
+  }
+}

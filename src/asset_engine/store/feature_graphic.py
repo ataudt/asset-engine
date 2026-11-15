@@ -15,6 +15,8 @@ Rules:
     one headline is ever on screen, here they are read side by side.
   - Only the headlines are localized. The device screens are drawn ~180px wide, where in-app text
     is illegible, so they come from whichever locale has raw captures (``--phone-language``).
+  - Drawing a block (``draw_blocks``) is shared with the App Store creatives (``creatives``), which
+    stand frames of the set on canvases of their own in the same way.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from dataclasses import dataclass, replace
 from functools import lru_cache
 from pathlib import Path
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 from asset_engine.store.captions import CaptionError
 from asset_engine.store.compose import (
@@ -54,6 +56,8 @@ from asset_engine.store.config import (
 from asset_engine.store.output import FRAME_SUFFIX
 from asset_engine.project import get_project
 from asset_engine.store.render import HeadlineLayout, layout_headline
+
+Box = tuple[int, int, int, int]
 
 ## The file name Play reserves for this asset in an upload tree, and what the metadata builder
 ## copies it to. Play matches the stem against {png,jpg,jpeg}, so the suffix follows the rest of the
@@ -119,7 +123,7 @@ class FeatureGraphicConfig:
     blocks: tuple[Block, ...]
 
 
-def _text_style(base: dict, override: dict) -> tuple[TextStyle, int]:
+def parse_text_style(base: dict, override: dict) -> tuple[TextStyle, int]:
     merged = {**base, **override}
     style = TextStyle(
         band_top=merged["band_top"],
@@ -141,7 +145,7 @@ def load_feature_config(path: Path | None = None) -> FeatureGraphicConfig:
     raw = json.loads((path or get_project().store_files().feature_graphic).read_text(encoding="utf-8"))
     blocks = []
     for entry in raw["blocks"]:
-        style, center_x = _text_style(raw["text"], entry.get("text", {}))
+        style, center_x = parse_text_style(raw["text"], entry.get("text", {}))
         ## The block's furniture is parsed by the screenshots' own slot parser, at offset zero: the
         ## numbers are already the banner's. ``caption`` is the capture number, which is what the
         ## capture lookup keys on, so no second naming scheme appears here.
@@ -240,6 +244,76 @@ def uniform_layouts(
     ]
 
 
+## A pixel counts as drawn by a block when it moved by more than this (0-255, summed over the
+## channels as ``L``). It keeps the faint tail of a phone's glow and a pose's soft shadow out of the
+## box a block reports, which is a box for judging where the artwork lies, not where its haze fades.
+DRAWN_THRESHOLD = 24
+
+
+def draw_blocks(
+    canvas: Image.Image,
+    screenshots: ScreenshotConfig,
+    slots: list[Slot],
+    *,
+    frame: FrameSpec,
+    shadow: ShadowSpec,
+    scanner_style: ScannerStyle,
+    chip_style: ChipStyle,
+    language: str,
+    phone_language: str,
+) -> list[Box | None]:
+    """Draw each slot whole on ``canvas``, in place — phone, then its furniture — and say where.
+
+    Shared by the feature graphic and the App Store creatives (``creatives``): both are a canvas of
+    their own with frames of the set standing on it. ``phone_language`` is whose screen is on the
+    phones and ``language`` who is reading; ``paste_furniture`` says why the two part company.
+
+    Returns, per slot, the box of what it actually changed on the canvas (``None`` if nothing), so a
+    rule judges what was drawn rather than what a config meant. Measuring only compares the canvas
+    before and after; it never draws, so the pixels are those of drawing straight onto the canvas.
+    """
+    boxes: list[Box | None] = []
+    ## Each block is drawn whole — phone, then its furniture — rather than every phone first and
+    ## every pose after. The poses sit between the columns and no pose overlaps a neighbour's
+    ## bezel, so the order is free today; it is a constraint on anything moved sideways later.
+    for slot in slots:
+        before = canvas.convert("RGB")
+        if slot.phone is not None:
+            framed = framed_capture(
+                screenshots,
+                phone_language,
+                slot,
+                frame=frame,
+                phone_width=slot.phone.width,
+            )
+            center = center_of(slot.phone, framed.size)
+            offset = shadow.offset
+            paste_rotated(
+                canvas,
+                shadow_for(framed, shadow),
+                (center[0] + offset[0], center[1] + offset[1]),
+                slot.phone.rotation,
+            )
+            paste_rotated(canvas, framed, center, slot.phone.rotation)
+
+        ## Which dish the chips describe follows the capture, and a block names one dish outright —
+        ## so on the feature graphic a locale that records a dish of its own never reaches the banner.
+        resolved = resolve_capture(screenshots, phone_language, slot) if slot.phone is not None else None
+        paste_furniture(
+            canvas,
+            screenshots,
+            language,
+            slot,
+            scanner_style=scanner_style,
+            chip_style=chip_style,
+            shown=phone_language if resolved is None else resolved[1],
+            capture_language=phone_language,
+        )
+        moved = ImageChops.difference(before, canvas.convert("RGB")).convert("L")
+        boxes.append(moved.point(lambda value: 255 if value > DRAWN_THRESHOLD else 0).getbbox())
+    return boxes
+
+
 def compose_feature_graphic(
     headlines: list[list[str]],
     *,
@@ -274,41 +348,17 @@ def compose_feature_graphic(
     if screenshots.scrim is not None:
         apply_scrim(canvas, screenshots.scrim)
 
-    ## Each block is drawn whole — phone, then its furniture — rather than every phone first and
-    ## every pose after. The poses sit between the columns and no pose overlaps a neighbour's
-    ## bezel, so the order is free today; it is a constraint on anything moved sideways later.
-    for block in config.blocks:
-        if block.slot.phone is not None:
-            framed = framed_capture(
-                screenshots,
-                phone_language,
-                block.slot,
-                frame=config.frame,
-                phone_width=block.slot.phone.width,
-            )
-            center = center_of(block.slot.phone, framed.size)
-            offset = config.shadow.offset
-            paste_rotated(
-                canvas,
-                shadow_for(framed, config.shadow),
-                (center[0] + offset[0], center[1] + offset[1]),
-                block.slot.phone.rotation,
-            )
-            paste_rotated(canvas, framed, center, block.slot.phone.rotation)
-
-        ## Which dish the chips describe follows the capture, and the banner's block names one dish
-        ## outright — so a locale that records a dish of its own never reaches the banner.
-        resolved = resolve_capture(screenshots, phone_language, block.slot) if block.slot.phone is not None else None
-        paste_furniture(
-            canvas,
-            screenshots,
-            language,
-            block.slot,
-            scanner_style=config.scanner_style,
-            chip_style=config.chip_style,
-            shown=phone_language if resolved is None else resolved[1],
-            capture_language=phone_language,
-        )
+    draw_blocks(
+        canvas,
+        screenshots,
+        [block.slot for block in config.blocks],
+        frame=config.frame,
+        shadow=config.shadow,
+        scanner_style=config.scanner_style,
+        chip_style=config.chip_style,
+        language=language,
+        phone_language=phone_language,
+    )
 
     image = canvas.convert("RGB")
     draw = ImageDraw.Draw(image)
@@ -339,6 +389,8 @@ __all__ = [
     "Ground",
     "FeatureGraphicError",
     "compose_feature_graphic",
+    "draw_blocks",
     "load_feature_config",
+    "parse_text_style",
     "read_headlines",
 ]

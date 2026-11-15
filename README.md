@@ -4,6 +4,7 @@ Renders the image assets every app in this workspace needs from the app's own de
 
 - **Store screenshots**: localized frames for the App Store and Google Play, per device (phone, tablet) and per store page (the app's own listing and Apple custom product pages).
 - **The Play feature graphic** (1024×500), built from the same pieces.
+- **App Store creative assets** (iOS 27): the product page header, the search results image and the universal asset. They are built from the same pieces, on Apple's canvases, and checked against Apple's art safe area.
 - **Print flyers**: laid out in millimetres with bleed, with QR codes and the forwarding pages behind them.
 - **Trade-fair roll-ups**: in a print shop's exact data format, composed from an element list and checked against the rules that decide whether a banner works at a stand.
 - **Profile banners** (LinkedIn 1584×396): composed from an element list and checked against where the platform covers it with the profile photo or crops it on phones.
@@ -35,12 +36,50 @@ it.
 | Package | What |
 |---|---|
 | `asset_engine.project` | `AssetProject` and its product sections, `PageRegistry`, `set_project` / `get_project` |
-| `asset_engine.store` | slots, devices, designs and pages (`config`), composition (`compose`, `frame`), typesetting (`render`, `fonts`), captions, feature graphic, output format, CLI |
+| `asset_engine.store` | slots, devices, designs and pages (`config`), composition (`compose`, `frame`), typesetting (`render`, `fonts`), captions, feature graphic, App Store creatives (`creatives`, Apple's figures in `app_store_creatives.json`), output format, CLI |
 | `asset_engine.printing` | what printed products share: `Sheet` (mm ↔ px, bleed, hidden strips and safety margin per edge), drawing pieces (`elements`), QR codes, forwarding pages (`links`), copy files, the PDF |
 | `asset_engine.flyers` | the two-page A6 flyer, CLI |
 | `asset_engine.rollups` | print-shop formats (`printers.json`), the element list (`config`, `compose`), the rules (`rules`), CLI |
 | `asset_engine.banners` | platform formats and their photo and crop zones (`platforms.json`), the element list (`config`, `compose`), the zone checks (`rules`), CLI |
 | `asset_engine.logos` | icon targets and their safe circles (`platforms.json`), the app's logo config (`config`), the draft prompt (`prompt`), drafts from the app's image model (`generate`), the icon set from the master (`derive`), CLI |
+
+## App Store creatives
+
+Apple's creative assets appear above the screenshots: on the product page, in search results, and in
+featuring. `asset_engine.store.creatives` composes them the way the feature graphic is composed:
+
+- the set's own billboard and scrim as the ground,
+- frames of the set standing on it as blocks (`feature_graphic.draw_blocks`),
+- the screenshot captions, by number, as the words.
+
+The phones show the reader's own captures, since at these sizes the interface can be read.
+
+What Apple accepts is `store/app_store_creatives.json`, read off Apple's specification with the
+date:
+
+| Placement | Aspect | Size | Art safe area | Formats |
+|---|---|---|---|---|
+| `header` | 21:9 | 3840×1646 | 1646×661 at (1097, 493) | jpeg, png |
+| `search-results` | 3:2 | 1920×1280 to 3840×2560 | 2168×1030 at (836, 765), stated for the maximum | jpeg, png |
+| `universal` | 16:9 | 5244×2950 | 1402×962 at (1921, 660) | png only |
+
+The app lays out the placements it wants in the file `StoreFiles.creatives` names:
+
+- `name_template` and shared styles at the top: `frame`, `shadow`, `scanner_style`, `chip_style`,
+  `text`, `subline`.
+- One entry per placement, keyed by its name above. It holds a `ground`, optionally its own
+  `scrim` (`null` for none; leaving it out keeps the screenshots'), `blocks` (feature-graphic
+  blocks: a slot plus a `capture` number) and `texts` (`{"caption": N, "subline": true, ...}` plus
+  a band).
+- An element is `role: "key"` by default and must lie inside the art safe area, judged on the box
+  it actually drew. `"aux"` marks the atmospheric art that may run to the edges.
+
+`<prog> creatives [--language …] [--placement …] [--out DIR] [--guides]` writes
+`<set>/<lang>/<name>.jpg`, or `.png` for a placement Apple takes as PNG only. The image is flattened
+to RGB, with no alpha. Findings (overflowing type, key art past the safe area) are printed loudly and
+never withhold the file. `--guides` writes a reduced sheet with the safe area and every element's
+box drawn in, under `_creative_guides/<lang>/` beside the sets. Uploading is by hand in App Store
+Connect.
 
 ## Roll-ups
 
