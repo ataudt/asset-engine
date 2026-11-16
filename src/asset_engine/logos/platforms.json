@@ -118,5 +118,20 @@
     "safe_circle": 1.0,
     "viewport": 1.0,
     "masks": []
+  },
+  "in-app-mark": {
+    "_source": [
+      "No platform guide: the app draws this file itself (a header beside its name), so no device mask",
+      "applies. 256 px covers a 32 pt mark at @3x with headroom for a larger one."
+    ],
+    "_note": [
+      "The motif alone on a transparent square, edge to edge, for an app's own UI. With the safe circle",
+      "the whole square, an app's fill of 1.0 puts the motif's bounding circle at the file's edge."
+    ],
+    "size": 256,
+    "layer": "foreground",
+    "safe_circle": 1.0,
+    "viewport": 1.0,
+    "masks": []
   }
 }
