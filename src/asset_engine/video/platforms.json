@@ -1,0 +1,23 @@
+{
+  "_comment": "What each platform accepts for a short vertical video's upload text, read off the platform's own pages on the date given. A value only third parties report says so in its source. Units matter: YouTube counts the description in UTF-8 bytes and tags with their separators; TikTok's API counts the caption in UTF-16 code units.",
+  "youtube": {
+    "title_max_chars": 100,
+    "title_source": "https://support.google.com/youtube/answer/57404 (\"Video titles have a character limit of 100 characters\"), read 2026-11-16",
+    "description_max_bytes": 5000,
+    "description_source": "https://developers.google.com/youtube/v3/docs/videos (snippet.description: \"maximum length of 5000 bytes\"; the help page 57404 says 5,000 characters), read 2026-11-16",
+    "tags_max_chars": 500,
+    "tags_source": "https://developers.google.com/youtube/v3/docs/videos (snippet.tags[]: 500 characters for the list; commas count, and a tag with a space counts as if quoted), read 2026-11-16",
+    "hashtags_max": 60,
+    "hashtags_shown_by_title": 3,
+    "hashtags_source": "https://support.google.com/youtube/answer/6390658 (more than 60 hashtags: every hashtag is ignored; up to three appear by the title), read 2026-11-16",
+    "angle_brackets_forbidden": true,
+    "angle_brackets_source": "https://developers.google.com/youtube/v3/docs/videos (title and description: every valid UTF-8 character except < and >), read 2026-11-16"
+  },
+  "tiktok": {
+    "caption_max_utf16": 2200,
+    "caption_source": "https://developers.tiktok.com/doc/content-posting-api-reference-direct-post (post_info.title: \"The maximum length is 2200 in UTF-16 runes\"; the app itself is reported to accept 4,000), read 2026-11-16",
+    "hashtags_max": 5,
+    "hashtags_source": "reported, not published by TikTok: an in-app cap of \"Maximum 5 hashtags\" since Aug 2025 (https://www.socialmediatoday.com/news/tiktok-implements-five-hashtag-limit-per-post/757857/), read 2026-11-16",
+    "own_business_disclosure_source": "https://developers.tiktok.com/doc/content-posting-api-reference-direct-post (brand_organic_toggle: \"Set to true if this video is promoting the creator's own business\"; brand_content_toggle is a paid partnership for a third party), read 2026-11-16"
+  }
+}

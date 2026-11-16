@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asset-engine"
-version = "0.3.0"
-description = "Store screenshots, Play feature graphics, App Store creative assets, print flyers, trade-fair roll-ups, profile banners and app icons, composed from an app's own definitions"
+version = "0.4.0"
+description = "Store screenshots, Play feature graphics, App Store creative assets, print flyers, trade-fair roll-ups, profile banners, app icons and short vertical videos, composed from an app's own definitions"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -23,12 +23,15 @@ dev = ["pytest"]
 # Drawing app-icon drafts. Not pinned exactly: a draft is not a reproducible output, and the icon set
 # is derived from the committed master with Pillow alone. The client is built by the app.
 logos = ["google-genai>=2.0"]
+# Short videos: ffmpeg from the wheel (or PATH) and the speech model for captions. Not pinned exactly:
+# a render depends on the transcript cache it writes, not on the model that filled it.
+video = ["imageio-ffmpeg>=0.5", "faster-whisper>=1.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-asset_engine = ["rollups/printers.json", "banners/platforms.json", "logos/platforms.json", "store/app_store_creatives.json"]
+asset_engine = ["rollups/printers.json", "banners/platforms.json", "logos/platforms.json", "store/app_store_creatives.json", "video/platforms.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

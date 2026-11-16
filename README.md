@@ -9,6 +9,7 @@ Renders the image assets every app in this workspace needs from the app's own de
 - **Trade-fair roll-ups**: in a print shop's exact data format, composed from an element list and checked against the rules that decide whether a banner works at a stand.
 - **Profile banners** (LinkedIn 1584×396): composed from an element list and checked against where the platform covers it with the profile photo or crops it on phones.
 - **App icons**: drafts drawn by an image model from a description, and every platform's icon file (iOS, Play, Android adaptive layers, splash, favicon) derived from the draft the app chose.
+- **Short vertical videos** (standalone, no app): a talking-head clip with pictures popping in on cue, word-by-word captions and a cleaned-up voice at −14 LUFS, cut to the speech.
 
 The engine is the code. The definitions stay in the app's repo: layouts as JSON, captions per
 locale, the plain app captures, the brand faces and the store pages. The app hands them over as an
@@ -42,6 +43,7 @@ it.
 | `asset_engine.rollups` | print-shop formats (`printers.json`), the element list (`config`, `compose`), the rules (`rules`), CLI |
 | `asset_engine.banners` | platform formats and their photo and crop zones (`platforms.json`), the element list (`config`, `compose`), the zone checks (`rules`), CLI |
 | `asset_engine.logos` | icon targets and their safe circles (`platforms.json`), the app's logo config (`config`), the draft prompt (`prompt`), drafts from the app's image model (`generate`), the icon set from the master (`derive`), CLI |
+| `asset_engine.video` | cues, pops, cut, voice and the ffmpeg render (`render`), transcript cache, corrections, ASS and SRT captions (`captions`), what YouTube and TikTok accept for upload text (`platforms.json`), CLI |
 
 ## App Store creatives
 
@@ -174,6 +176,36 @@ secrets. The client library is the `logos` extra (`pip install -e '../asset-engi
 
 Vertex serves the Gemini image models in `global` and `us-central1` only, not in an EU region. A logo
 description holds no user data.
+
+## Videos
+
+Standalone: it needs no app and no `AssetProject`. Install the extra once
+(`pip install -e '.[video]'`: ffmpeg from the wheel and faster-whisper), then:
+
+```bash
+~/.pyenv/versions/asset-engine/bin/python -m asset_engine.video render RAW.mp4 cues.txt \
+    --out-dir edited/ --name "kalorien app" --mirror --trim auto --fix fixes.txt
+```
+
+- **Cue file**, one picture per line, times in the raw clip, picture paths relative to the file:
+
+  ```
+  00:06.9  ../raw/IMG_3421.PNG  unten-rechts  bis 00:08.6  w=40%
+  12.0     foto.jpg             x=30% y=40%   1.5s         pop=aus
+  ```
+
+  Positions: `mitte`, `oben`, `unten`, `links`, `rechts`, the four corners (`oben-links` …, English
+  works too), or `x=`/`y=` inside the zone the platforms leave uncovered.
+- **Corrections** (`--fix`): one `wrong => right` per line, applied to the transcript before the
+  captions are drawn. The transcript is made once with Whisper into `words.json` beside the cue file.
+- **`--trim auto`** cuts from 0.2 s before the first sound to 0.35 s after the last, measured on
+  the level. **`--mirror`** undoes a selfie camera's mirroring.
+- **Output**, named after the camera's recording date: `2026-11-16_kalorien-app.mp4`, and beside it
+  `.srt` (caption track for YouTube), `.cover.jpg` (middle of the first picture, or `--cover-at`) and
+  `.transcript.txt` (what is said and shown, on the cut's clock). `sidecars` writes only these three
+  for an existing render.
+- **Upload text**: written by hand (in a Claude session) from the transcript, into
+  `<stem>.upload.md`, against the limits in `video/platforms.json`.
 
 ## Development
 

@@ -1,7 +1,8 @@
 # asset-engine — agent notes
 
 The shared renderer for store screenshots, the Play feature graphic, App Store creative assets,
-print flyers, trade-fair roll-ups, profile banners and app icons. It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
+print flyers, trade-fair roll-ups, profile banners and app icons, plus short vertical videos
+(standalone, see below). It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
 (roll-ups) install it, `Apps/brand/` (profile banners) runs on this venv, and nothing is copied
 back and forth. Interpreter:
 `~/.pyenv/versions/asset-engine/bin/python`. Both apps' venvs have it installed editable, so an edit
@@ -18,6 +19,15 @@ here is live there. Public on GitHub as `ataudt/asset-engine`; an app's `setup.p
   `PageRegistry` or a callable on `AssetProject`.
 - The engine holds no credentials and reads no `.env`. A model client is built by the app from its
   own secrets and handed over as a callable (`LogoFiles.google_client`).
+
+# Videos stand alone
+
+`asset_engine.video` is for social-media content in general, not for an app: it runs as
+`python -m asset_engine.video` from this venv, has no `AssetProject`, and takes every input (clip,
+cue file, pictures, corrections) on the command line. The upload text (titles, description,
+hashtags) is written by Claude in the session from the `<stem>.transcript.txt` the render leaves
+beside the clip, against the limits in `video/platforms.json`; no code calls a model. Outputs are
+named `<recording date>_<1-3 words>`.
 
 # Output is a function of its inputs
 
