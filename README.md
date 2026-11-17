@@ -61,7 +61,7 @@ date:
 
 | Placement | Aspect | Size | Art safe area | Formats |
 |---|---|---|---|---|
-| `header` | 21:9 | 3840×1646 | 1646×661 at (1097, 493) | jpeg, png |
+| `header` | 21:9 | 3840×1646 | 1646×661 at (1097, 493) | png only (the API's reference data; the help page also lists jpeg) |
 | `search-results` | 3:2 | 1920×1280 to 3840×2560 | 2168×1030 at (836, 765), stated for the maximum | jpeg, png |
 | `universal` | 16:9 | 5244×2950 | 1402×962 at (1921, 660) | png only |
 

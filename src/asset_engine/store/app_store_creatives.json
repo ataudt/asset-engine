@@ -10,20 +10,23 @@
     "the width. Everything a person must see stays inside it: Apple crops the rest across devices and",
     "orientations, and the area around it is for atmospheric art only (`Auxiliary Art Area`).",
     "None of the images may carry an alpha channel or transparency. `formats` are the extensions",
-    "Apple takes; the universal asset is PNG only."
+    "Apple takes. Where Apple's two sources disagree, `formats` follows the API's reference data,",
+    "because that is what an upload is checked against: the help page lists JPEG for the header, the",
+    "API accepts only PNG."
   ],
   "_source": [
     "https://developer.apple.com/help/app-store-connect/reference/app-information/creative-assets-specifications (read 2026-11-15)",
-    "https://developer.apple.com/app-store/asset-best-practices/ (read 2026-11-15)"
+    "https://developer.apple.com/app-store/asset-best-practices/ (read 2026-11-15)",
+    "App Store Connect API, GET /v1/appAssetLibraryRefData, imageSpecs (read 2026-11-17)"
   ],
   "header": {
-    "_note": "Product page header. One image for the top of the product page.",
+    "_note": "Product page header. One image for the top of the product page. PNG only in the API (spec i3840x1646a0).",
     "aspect": [21, 9],
     "reference": [3840, 1646],
     "min": [3840, 1646],
     "max": [3840, 1646],
     "art_safe_area": {"origin": [1097, 493], "size": [1646, 661]},
-    "formats": ["jpeg", "png"]
+    "formats": ["png"]
   },
   "search-results": {
     "_note": "Search results. Apple gives the safe area for the maximum size only (\"Max: 2168 x 1030\").",
