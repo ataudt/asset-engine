@@ -18,7 +18,8 @@ here is live there. Public on GitHub as `ataudt/asset-engine`; an app's `setup.p
 - The engine never imports an app. What it needs to ask (store pages, chip words) is a method on
   `PageRegistry` or a callable on `AssetProject`.
 - The engine holds no credentials and reads no `.env`. A model client is built by the app from its
-  own secrets and handed over as a callable (`LogoFiles.google_client`).
+  own secrets and handed over as a callable (`LogoFiles.google_client`); so is the App Store Connect
+  key (`store.connect`, `AppStoreConnectClient(key_getter=…)`).
 
 # Videos stand alone
 
@@ -69,7 +70,9 @@ outputs in the apps (website screens, share cards) depend on it.
 FieldFix (roll-ups) runs `asset_engine.rollups` through `python -m marketing.rollups`; after a
 change there, run `~/.pyenv/versions/fieldfix/bin/python -m pytest marketing/rollups` from
 `FieldFix-App/`. NutriSpy imports these modules directly (`asset_engine.store.config`, `.compose`, `.captions`,
-`.output`, …) from its metadata builders, website builders and tests. Renaming or reshaping a public
+`.output`, …) from its metadata builders, website builders and tests; NutriSpy and kcalculate place
+their creatives and NutriSpy its custom product pages through `asset_engine.store.connect` (after a
+change there, also run kcalculate's suite and both apps' creatives plan). Renaming or reshaping a public
 name breaks them. Run NutriSpy's suite (`~/.pyenv/versions/nutrispy/bin/python -m pytest` from
 `NutriSpy-App/`) after any such change. Its sweeps are where most of this engine's coverage
 lives.

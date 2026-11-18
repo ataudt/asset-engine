@@ -37,7 +37,7 @@ it.
 | Package | What |
 |---|---|
 | `asset_engine.project` | `AssetProject` and its product sections, `PageRegistry`, `set_project` / `get_project` |
-| `asset_engine.store` | slots, devices, designs and pages (`config`), composition (`compose`, `frame`), typesetting (`render`, `fonts`), captions, feature graphic, App Store creatives (`creatives`, Apple's figures in `app_store_creatives.json`), output format, CLI |
+| `asset_engine.store` | slots, devices, designs and pages (`config`), composition (`compose`, `frame`), typesetting (`render`, `fonts`), captions, feature graphic, App Store creatives (`creatives`, Apple's figures in `app_store_creatives.json`), output format, CLI; the App Store Connect API (`connect`: client, asset upload, creative placement) |
 | `asset_engine.printing` | what printed products share: `Sheet` (mm ↔ px, bleed, hidden strips and safety margin per edge), drawing pieces (`elements`), QR codes, forwarding pages (`links`), copy files, the PDF |
 | `asset_engine.flyers` | the two-page A6 flyer, CLI |
 | `asset_engine.rollups` | print-shop formats (`printers.json`), the element list (`config`, `compose`), the rules (`rules`), CLI |
@@ -80,8 +80,28 @@ The app lays out the placements it wants in the file `StoreFiles.creatives` name
 `<set>/<lang>/<name>.jpg`, or `.png` for a placement Apple takes as PNG only. The image is flattened
 to RGB, with no alpha. Findings (overflowing type, key art past the safe area) are printed loudly and
 never withhold the file. `--guides` writes a reduced sheet with the safe area and every element's
-box drawn in, under `_creative_guides/<lang>/` beside the sets. Uploading is by hand in App Store
-Connect.
+box drawn in, under `_creative_guides/<lang>/` beside the sets.
+
+### Placing them
+
+`asset_engine.store.connect` places the rendered files on an iOS version's localizations through the
+App Store Connect API, which fastlane's `deliver` does not model (install with the `store` extra).
+The engine holds no key: the app builds the client from its own config and passes its bundle id and
+the locales to place:
+
+```python
+from asset_engine.store.connect import AppStoreConnectClient
+from asset_engine.store.connect.creatives import upload_creatives
+
+client = AppStoreConnectClient(key_getter=get_app_store_connect_api_key)  # the app's config getter
+upload_creatives(client=client, bundle_id="com.example.app", locales={"en": "en-US", "de": "de-DE"},
+                 execute=False)  # a plan; execute=True places
+```
+
+Each image is filed under a reference name carrying its file's MD5, so a run sends only what
+changed, and placements ride the version: they are reviewed with it. `client.py` takes
+`forbidden_resources` for a caller that must never write the main listing (custom product pages);
+`assets.py` also uploads screenshot sets.
 
 ## Roll-ups
 

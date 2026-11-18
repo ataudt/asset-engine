@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asset-engine"
-version = "0.4.1"
-description = "Store screenshots, Play feature graphics, App Store creative assets, print flyers, trade-fair roll-ups, profile banners, app icons and short vertical videos, composed from an app's own definitions"
+version = "0.5.0"
+description = "Store screenshots, Play feature graphics, App Store creative assets and their upload, print flyers, trade-fair roll-ups, profile banners, app icons and short vertical videos, composed from an app's own definitions"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -26,6 +26,9 @@ logos = ["google-genai>=2.0"]
 # Short videos: ffmpeg from the wheel (or PATH) and the speech model for captions. Not pinned exactly:
 # a render depends on the transcript cache it writes, not on the model that filled it.
 video = ["imageio-ffmpeg>=0.5", "faster-whisper>=1.1"]
+# The App Store Connect API (asset_engine.store.connect). The key stays in the app, which hands it
+# over as a callable; uploading changes no render.
+store = ["PyJWT[crypto]>=2.8", "requests>=2.31"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
