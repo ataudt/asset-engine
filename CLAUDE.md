@@ -3,7 +3,7 @@
 The shared renderer for store screenshots, the Play feature graphic, App Store creative assets,
 print flyers, trade-fair roll-ups, profile banners and app icons, plus short vertical videos
 (standalone, see below). It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
-(roll-ups) install it, `Apps/brand/` (profile banners) runs on this venv, and nothing is copied
+(roll-ups) install it, `website/brand/` (profile banners) runs on this venv, and nothing is copied
 back and forth. Interpreter:
 `~/.pyenv/versions/asset-engine/bin/python`. Both apps' venvs have it installed editable, so an edit
 here is live there. Public on GitHub as `ataudt/asset-engine`; an app's `setup.py` pins a tag.
@@ -66,7 +66,7 @@ outputs in the apps (website screens, share cards) depend on it.
 
 # Before changing an API
 
-`Apps/brand/` (profile banners) runs `asset_engine.banners` through `python -m marketing.banners`.
+`website/brand/` (profile banners) runs `asset_engine.banners` through `python -m marketing.banners`.
 FieldFix (roll-ups) runs `asset_engine.rollups` through `python -m marketing.rollups`; after a
 change there, run `~/.pyenv/versions/fieldfix/bin/python -m pytest marketing/rollups` from
 `FieldFix-App/`. NutriSpy imports these modules directly (`asset_engine.store.config`, `.compose`, `.captions`,

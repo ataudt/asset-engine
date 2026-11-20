@@ -150,7 +150,7 @@ def load_config(path: Path | None = None) -> BannerConfig:
             for role, face in raw["fonts"].items()
             if not role.startswith("_")
         },
-        default_out_dir=project.root / raw["default_out_dir"],
+        default_out_dir=project.root / Path(raw["default_out_dir"]).expanduser(),
         banners={name: _banner(name, entry) for name, entry in raw["banners"].items() if not name.startswith("_")},
     )
 

@@ -10,7 +10,8 @@ Rules:
     ``fill``s (``fill_by_target`` overrides it per target: a safe circle that is the whole square, as
     on iOS, makes the same fill look larger than inside Android's 66 dp), the ``master`` it chose, and
     where each target is written.
-  - Paths resolve against ``get_project().root``. Colours are RGB lists or ``#rrggbb``.
+  - Paths resolve against ``get_project().root``; an absolute or ``~/`` path (a library outside the
+    repo) is taken as is. Colours are RGB lists or ``#rrggbb``.
 """
 
 from __future__ import annotations
@@ -138,10 +139,10 @@ def load_config(path: Path | None = None) -> LogoConfig:
         fill=fill,
         fill_by_target=fill_by_target,
         style=raw.get("style", ""),
-        master=project.root / _required(raw, "master", source),
-        default_out_dir=project.root / _required(raw, "default_out_dir", source),
+        master=project.root / Path(_required(raw, "master", source)).expanduser(),
+        default_out_dir=project.root / Path(_required(raw, "default_out_dir", source)).expanduser(),
         outputs={
-            target(name): project.root / relative
+            target(name): project.root / Path(relative).expanduser()
             for name, relative in _required(raw, "targets", source).items()
             if not name.startswith("_")
         },
