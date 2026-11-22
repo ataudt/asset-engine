@@ -119,6 +119,22 @@
     "viewport": 1.0,
     "masks": []
   },
+  "apple-touch-icon": {
+    "_source": [
+      "https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/ConfiguringWebApplications/ConfiguringWebApplications.html (read 2026-11-22)"
+    ],
+    "_note": [
+      "The icon iOS shows for a web page on the home screen and in Safari's favourites, linked by",
+      "`<link rel=\"apple-touch-icon\">`. The guide's iPhone example is 180x180 ('touch-icon-iphone-retina');",
+      "a device picks the closest size, so one file serves iPad too. iOS masks it like an app icon, so it",
+      "is a full, opaque square, unmasked, under the same superellipse preview as `ios-app-store`."
+    ],
+    "size": 180,
+    "layer": "full",
+    "safe_circle": 1.0,
+    "viewport": 1.0,
+    "masks": ["superellipse"]
+  },
   "in-app-mark": {
     "_source": [
       "No platform guide: the app draws this file itself (a header beside its name), so no device mask",

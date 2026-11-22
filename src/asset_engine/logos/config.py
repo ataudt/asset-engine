@@ -9,7 +9,8 @@ Rules:
     the build cuts away, the ``background`` behind the motif, how much of each safe circle the motif
     ``fill``s (``fill_by_target`` overrides it per target: a safe circle that is the whole square, as
     on iOS, makes the same fill look larger than inside Android's 66 dp), the ``master`` it chose, and
-    where each target is written.
+    where each target is written: one path, or a list when the app keeps the same file in several
+    places (the app's assets and a web tool's static folder).
   - Paths resolve against ``get_project().root``; an absolute or ``~/`` path (a library outside the
     repo) is taken as is. Colours are RGB lists or ``#rrggbb``.
 """
@@ -106,8 +107,8 @@ class LogoConfig:
     style: str
     master: Path
     default_out_dir: Path
-    ## Target -> where the app keeps that file.
-    outputs: dict[Target, Path]
+    ## Target -> every place the app keeps that file.
+    outputs: dict[Target, tuple[Path, ...]]
 
     def fill_for(self, target: Target) -> float:
         return self.fill_by_target.get(target.name, self.fill)
@@ -117,6 +118,13 @@ def _required(raw: dict[str, Any], key: str, source: Path) -> Any:
     if key not in raw:
         raise LogoConfigError(f"{source}: the logo config has no {key!r}")
     return raw[key]
+
+
+def _paths(where: str | list[str], name: str, source: Path) -> list[str]:
+    paths = [where] if isinstance(where, str) else where
+    if not paths or not all(isinstance(path, str) for path in paths):
+        raise LogoConfigError(f"{source}: target {name!r} must name a path or a list of paths, not {where!r}")
+    return paths
 
 
 @lru_cache(maxsize=None)
@@ -142,8 +150,8 @@ def load_config(path: Path | None = None) -> LogoConfig:
         master=project.root / Path(_required(raw, "master", source)).expanduser(),
         default_out_dir=project.root / Path(_required(raw, "default_out_dir", source)).expanduser(),
         outputs={
-            target(name): project.root / Path(relative).expanduser()
-            for name, relative in _required(raw, "targets", source).items()
+            target(name): tuple(project.root / Path(relative).expanduser() for relative in _paths(where, name, source))
+            for name, where in _required(raw, "targets", source).items()
             if not name.startswith("_")
         },
     )

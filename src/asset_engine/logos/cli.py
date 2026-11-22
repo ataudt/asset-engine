@@ -151,23 +151,24 @@ def guides(rendered: dict[Target, Image.Image], config: LogoConfig) -> Image.Ima
 def _cmd_build(args: argparse.Namespace) -> int:
     config = load_config()
     out_dir = Path(args.out).expanduser() if args.out else None
-    paths = {target: (out_dir / f"{target.name}.png" if out_dir else path) for target, path in config.outputs.items()}
+    paths = {target: ((out_dir / f"{target.name}.png",) if out_dir else where) for target, where in config.outputs.items()}
     guides_path = (out_dir or config.default_out_dir) / "guides.png"
     run = Run()
     if not config.master.is_file():
         run.fail("master", f"no master at {_relative(config.master)} — run generate and copy a draft there",
-                 clear_outputs([*paths.values(), guides_path]))
+                 clear_outputs([*(path for where in paths.values() for path in where), guides_path]))
         return run.summary()
     with Image.open(config.master) as master:
         motif, findings = cut_out(master, config.key_color)
     print(f"     master: {_relative(config.master)} (motif {motif.image.width}x{motif.image.height})")
     rendered = {}
-    for target, path in paths.items():
+    for target, where in paths.items():
         image = render(motif, target, background=config.background, fill=config.fill_for(target))
-        path.parent.mkdir(parents=True, exist_ok=True)
-        image.save(path, format="PNG", optimize=True)
+        for path in where:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            image.save(path, format="PNG", optimize=True)
+            print(f"ok   {target.name}: {_relative(path)} ({image.width}x{image.height}, {image.mode})")
         rendered[target] = image
-        print(f"ok   {target.name}: {_relative(path)} ({image.width}x{image.height}, {image.mode})")
     if args.guides:
         guides_path.parent.mkdir(parents=True, exist_ok=True)
         guides(rendered, config).save(guides_path, format="PNG")
