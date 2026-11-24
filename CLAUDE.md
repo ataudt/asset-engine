@@ -3,7 +3,7 @@
 The shared renderer for store screenshots, the Play feature graphic, App Store creative assets,
 print flyers, trade-fair roll-ups, profile banners and app icons, plus short vertical videos
 (standalone, see below). It is a real dependency of the apps, not a fork: NutriSpy (store set, flyers) and FieldFix
-(roll-ups) install it, `website/brand/` (profile banners) runs on this venv, and nothing is copied
+(roll-ups) install it, `brand-creator/` (profile banners, the mark, short videos) has it editable in its own venv, and nothing is copied
 back and forth. Interpreter:
 `~/.pyenv/versions/asset-engine/bin/python`. Both apps' venvs have it installed editable, so an edit
 here is live there. Public on GitHub as `ataudt/asset-engine`; an app's `setup.py` pins a tag.
@@ -25,10 +25,17 @@ here is live there. Public on GitHub as `ataudt/asset-engine`; an app's `setup.p
 
 `asset_engine.video` is for social-media content in general, not for an app: it runs as
 `python -m asset_engine.video` from this venv, has no `AssetProject`, and takes every input (clip,
-cue file, pictures, corrections) on the command line. The upload text (titles, description,
-hashtags) is written by Claude in the session from the `<stem>.transcript.txt` the render leaves
-beside the clip, against the limits in `video/platforms.json`; no code calls a model. Outputs are
-named `<recording date>_<1-3 words>`.
+cue file, pictures, corrections, removals, a second clip and its track) on the command line.
+`brand-creator` is its consumer: a short's folder there becomes these arguments
+(`brand_creator/shorts/contract.py`), so a renamed flag breaks it. The upload text (titles,
+description, hashtags) is written by Claude in the session from the `<stem>.transcript.txt` the
+render leaves beside the clip, against the limits in `video/platforms.json`; no code calls a model.
+The same holds for which of two takes is removed: Claude writes the removals from the transcript
+with times (`words`), the code only applies them. Outputs are named `<recording date>_<1-3 words>`.
+
+Every time a person writes (cues, removals, the second clip's track) is the raw speech clip's; only
+the render moves it onto the cut (`cuts.Timeline`). One uncut clip alone in the frame goes through
+the graph it always did, so its render does not change when cuts and layouts gain features.
 
 # Output is a function of its inputs
 
@@ -66,7 +73,8 @@ outputs in the apps (website screens, share cards) depend on it.
 
 # Before changing an API
 
-`website/brand/` (profile banners) runs `asset_engine.banners` through `python -m marketing.banners`.
+`brand-creator/` runs `asset_engine.banners` and `.logos` through `python -m marketing.banners` / `marketing.logos`, and
+`asset_engine.video` through `python -m brand_creator short`.
 FieldFix (roll-ups) runs `asset_engine.rollups` through `python -m marketing.rollups`; after a
 change there, run `~/.pyenv/versions/fieldfix/bin/python -m pytest marketing/rollups` from
 `FieldFix-App/`. NutriSpy imports these modules directly (`asset_engine.store.config`, `.compose`, `.captions`,

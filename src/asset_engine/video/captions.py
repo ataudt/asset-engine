@@ -4,9 +4,12 @@ Layer: asset engine.
 Rules:
   - Transcription runs once per clip: the words go to a cache file, and every later render reads
     them from there, so a render is a function of that file and not of the speech model.
-  - Times are the raw clip's. Shifting them onto a trimmed cut is the renderer's job (``shift``).
+  - Times are the raw clip's. Moving them onto the cut's clock is the renderer's job (``cuts.Timeline``).
   - Hyphenated words are joined before corrections apply, so a correction is written the way the
     word is shown.
+  - A caption group that would reach past the frame's edge is drawn narrower, not cut off: German
+    compounds ("Datenschutzeinstellungen") are longer than the frame at the captions' size. The width
+    is estimated from the letter count, since the face is the player's and cannot be measured here.
   - ``faster-whisper`` is the ``video`` extra and is imported only when a clip has no cache yet.
 """
 
@@ -16,6 +19,15 @@ from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 import re
+
+
+CAPTION_SIZE = 84
+## Left of the frame's edge, and left of the platforms' button column.
+CAPTION_MARGIN_L, CAPTION_MARGIN_R = 80, 180
+## An upper-case letter of Arial Black is about this wide, in units of the size.
+CAPTION_LETTER_EM = 0.54
+## What stays clear at the frame's edge.
+CAPTION_EDGE = 30
 
 
 class CaptionError(RuntimeError):
@@ -94,11 +106,6 @@ def apply_fixes(words: list[Word], fixes_path: Path) -> list[Word]:
     return out
 
 
-def shift(words: list[Word], t0: float, t1: float) -> list[Word]:
-    """The words heard in the cut ``t0``–``t1`` of the raw clip, on the cut's own clock."""
-    return [Word(w.word, max(0.0, w.start - t0), min(t1 - t0, w.end - t0)) for w in words if w.end > t0 and w.start < t1]
-
-
 def groups(words: list[Word]) -> list[list[Word]]:
     """Caption groups: at most 3 words or about 18 characters, broken at punctuation and pauses."""
     out, cur = [], []
@@ -139,14 +146,20 @@ def captions_ass(words: list[Word], out: Path, *, width: int, height: int, basel
         "Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding",
         ## Primary = the word being spoken (yellow), secondary = not spoken yet (white).
-        "Style: Cap,Arial Black,84,&H0000E6FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,7,3,"
-        f"2,80,180,{height - baseline},1",
+        f"Style: Cap,Arial Black,{CAPTION_SIZE},&H0000E6FF,&H00FFFFFF,&H00000000,&H64000000,-1,0,0,0,100,100,0,0,1,7,3,"
+        f"2,{CAPTION_MARGIN_L},{CAPTION_MARGIN_R},{height - baseline},1",
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     grouped = groups(words)
-    pop = "{\\fscx80\\fscy80\\t(0,90,\\fscx105\\fscy105)\\t(90,160,\\fscx100\\fscy100)}"
+    ## The captions are centred between the margins, so the nearer edge of the frame limits them.
+    centre = (CAPTION_MARGIN_L + width - CAPTION_MARGIN_R) / 2
+    room = 2 * (min(centre, width - centre) - CAPTION_EDGE)
     for g, (start, end) in zip(grouped, _spans(grouped)):
         text = " ".join(f"{{\\k{max(1, round((w.end - w.start) * 100))}}}{w.word.upper()}" for w in g)
+        letters = sum(len(w.word) for w in g) + len(g) - 1
+        fit = min(1.0, room / (letters * CAPTION_SIZE * CAPTION_LETTER_EM))
+        a, b, c = (round(x * fit) for x in (80, 105, 100))
+        pop = f"{{\\fscx{a}\\fscy{a}\\t(0,90,\\fscx{b}\\fscy{b})\\t(90,160,\\fscx{c}\\fscy{c})}}"
         lines.append(f"Dialogue: 0,{ts(start)},{ts(end)},Cap,,0,0,0,,{pop}{text}")
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -171,4 +184,4 @@ def transcript(words: list[Word]) -> str:
 
 
 __all__ = ["CaptionError", "Word", "apply_fixes", "captions_ass", "captions_srt", "groups", "join_hyphens",
-           "shift", "transcribe", "transcript"]
+           "transcribe", "transcript"]

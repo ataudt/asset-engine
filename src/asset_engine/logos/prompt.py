@@ -22,6 +22,11 @@ def _canvas(key_color: RGB) -> str:
     key = hex_color(key_color)
     return (
         f"The motif is centred and fills {MOTIF_SHARE} of a square canvas. "
+        ## Asked for "an app icon", the model draws the icon's rounded-square tile around the motif
+        ## (kcalculate, 2026-11-19); the platform supplies that shape, so the motif stands bare. The
+        ## sentence names only the silhouette: naming the tile, even to place it, drew it again.
+        f"The motif stands bare on the background: its silhouette is the object's own outline, with "
+        f"{key} directly around it on every side. "
         f"The background is one perfectly flat, uniform colour, exactly {key}, edge to edge, "
         "so the motif can be cut out cleanly. "
         f"The motif's colours are clearly distinct from {key}, and its outline is crisp."

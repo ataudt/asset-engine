@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asset-engine"
-version = "0.5.0"
+version = "0.7.0"
 description = "Store screenshots, Play feature graphics, App Store creative assets and their upload, print flyers, trade-fair roll-ups, profile banners, app icons and short vertical videos, composed from an app's own definitions"
 readme = "README.md"
 requires-python = ">=3.11"

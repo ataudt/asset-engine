@@ -8,6 +8,11 @@ Rules:
     tabs at the top, the like/comment/share column on the right, name, text and sound at the bottom.
   - Cue times, and the words, are the raw clip's. A trimmed cut shifts them here, so a cue file
     never needs rewriting when the cut moves.
+  - An HDR clip (HLG or PQ, as iPhones record) is tone-mapped to SDR BT.709 first; the platforms
+    show HDR uploads inconsistently, and untouched HLG in a BT.709 file looks washed out. An SDR clip
+    goes through the same graph as before, so its render does not change.
+  - A cleaned voice (``Job.voice``, see ``denoise``) replaces the clip's own sound and is read with the
+    same cut; the steady-noise stage is left out then, since it only adds artefacts behind the model.
   - The voice is brought to −14 LUFS, the level the streaming platforms normalise to. The loudness
     is measured again behind the limiter and topped up, because a quiet recording loses level there.
   - ffmpeg comes from ``PATH`` or the ``imageio-ffmpeg`` wheel (the ``video`` extra), resolved on
@@ -16,7 +21,7 @@ Rules:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from functools import lru_cache
 import json
@@ -31,7 +36,10 @@ import wave
 
 from PIL import Image, ImageDraw, ImageFilter
 
-from asset_engine.video.captions import Word, captions_ass, shift
+from asset_engine.video.captions import Word, captions_ass
+from asset_engine.video.cuts import Span, Timeline, parse_time
+from asset_engine.video.layout import (VIDEO_SUFFIXES, Layout, ScreenSpan, bubble_images, fit_lines, panel, slots,
+                                       title_card)
 
 W, H, FPS = 1080, 1920, 30
 ## left, top, right, bottom
@@ -54,15 +62,23 @@ POSITIONS = {
     "unten-rechts": (1.0, 1.0), "bottom-right": (1.0, 1.0),
 }
 
-VOICE_CHAIN = ",".join([
+STEADY_NOISE = "afftdn=nr=12:nf=-40:tn=1"             # steady noise, learning its profile as it goes
+VOICE_STAGES = [
     "highpass=f=80",                                   # rumble, footfall
-    "afftdn=nr=12:nf=-40:tn=1",                        # steady noise, learning its profile as it goes
+    STEADY_NOISE,
     "equalizer=f=250:t=q:w=1.0:g=-3",                  # boxiness
     "equalizer=f=3500:t=q:w=1.2:g=2.5",                # presence
     "equalizer=f=11000:t=h:w=0.7:g=1.5",               # air
     "deesser=i=0.4",                                   # sibilants
     "acompressor=threshold=-22dB:ratio=3:attack=8:release=120:makeup=3dB",
-])
+]
+VOICE_CHAIN = ",".join(VOICE_STAGES)
+## Behind a speech model the noise is gone; afftdn would only chew on what is left.
+CLEANED_VOICE_CHAIN = ",".join(s for s in VOICE_STAGES if s != STEADY_NOISE)
+HDR_TRANSFERS = ("arib-std-b67", "smpte2084")
+## Linear light, BT.709 primaries, Hable's curve, back to BT.709 gamma in TV range.
+TONEMAP = ("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable:desat=0,"
+           "zscale=t=bt709:m=bt709:r=tv,format=yuv420p,")
 ## loudnorm alone stays under the target on speech: it keeps its true-peak ceiling and falls back
 ## to dynamic mode once peak and loudness are more than 12.5 dB apart. So: measure, add the
 ## difference, limit the peaks at about −1.7 dBFS, measure behind the limiter, top up.
@@ -109,6 +125,13 @@ def probe(video: Path) -> tuple[float, bool]:
     return int(h) * 3600 + int(mi) * 60 + float(se), bool(re.search(r"Stream #.*: Audio:", r.stderr))
 
 
+def transfer(video: Path) -> str | None:
+    """The video stream's transfer function as ffmpeg names it (``arib-std-b67`` = HLG), if stated."""
+    r = subprocess.run([ffmpeg(), "-hide_banner", "-i", str(video)], capture_output=True, text=True)
+    m = re.search(r"Stream #.*: Video: .*?\((?:tv|pc), [\w-]+/[\w-]+/([\w-]+)", r.stderr)
+    return m.group(1) if m else None
+
+
 # ---------------------------------------------------------------- cues
 
 @dataclass(frozen=True)
@@ -120,13 +143,8 @@ class Cue:
     anchor: tuple[float, float]
     width_frac: float
     pop_sound: bool
-
-
-def parse_time(s: str) -> float:
-    secs = 0.0
-    for part in s.split(":"):
-        secs = secs * 60 + float(part)
-    return secs
+    ## Fills the frame for its time (a cutaway) instead of popping in as a card. A video always does.
+    full: bool = False
 
 
 def parse_cues(path: Path, duration: float) -> tuple[list[Cue], list[str]]:
@@ -135,8 +153,10 @@ def parse_cues(path: Path, duration: float) -> tuple[list[Cue], list[str]]:
         00:03.2   logo.png        oben-rechts   2s
         00:07.5   screenshot.png  mitte         bis 00:10   w=60%
         12.0      foto.jpg        x=30% y=40%   1.5s        pop=aus
+        00:15     demo.mp4        voll          bis 00:21
 
-    Returns the cues and the warnings about them."""
+    ``voll`` (``full``) fills the frame for that time, a cutaway; a video is always shown that way,
+    without its sound. Returns the cues and the warnings about them."""
     cues, warnings = [], []
     for lineno, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
         line = raw.split("#", 1)[0].strip()
@@ -147,12 +167,15 @@ def parse_cues(path: Path, duration: float) -> tuple[list[Cue], list[str]]:
             start = parse_time(toks[0])
             image = (path.parent / toks[1]).resolve()
             anchor, width, end, pop = (0.5, 0.5), 0.45, start + 2.0, True
+            full = image.suffix.lower() in VIDEO_SUFFIXES
             ax = ay = None
             i = 2
             while i < len(toks):
                 t = toks[i].lower()
                 if t in POSITIONS:
                     anchor = POSITIONS[t]
+                elif t in ("voll", "full"):
+                    full = True
                 elif t.startswith("x="):
                     ax = float(t[2:].rstrip("%")) / 100
                 elif t.startswith("y="):
@@ -179,7 +202,7 @@ def parse_cues(path: Path, duration: float) -> tuple[list[Cue], list[str]]:
             raise VideoError(f"{path}:{lineno}: ends before it starts")
         if start >= duration:
             warnings.append(f"{path.name}:{lineno}: starts after the clip ends ({duration:.1f} s)")
-        cues.append(Cue(start, min(end, duration), image, anchor, width, pop))
+        cues.append(Cue(start, min(end, duration), image, anchor, width, pop and not full, full))
     return cues, warnings
 
 
@@ -272,6 +295,16 @@ def _pop_wav(path: Path) -> None:
 
 # ---------------------------------------------------------------- the cut
 
+def silences(video: Path) -> list[Span]:
+    """Every silence of at least 0.15 s, from the level; one running to the end of the file ends there."""
+    duration, _ = probe(video)
+    r = subprocess.run([ffmpeg(), "-hide_banner", "-nostats", "-i", str(video), "-af", SILENCE, "-f", "null", "-"],
+                       capture_output=True, text=True)
+    starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", r.stderr)]
+    ends = [float(x) for x in re.findall(r"silence_end: ([\d.]+)", r.stderr)]
+    return list(zip(starts, ends + [duration] * (len(starts) - len(ends))))
+
+
 def speech_bounds(video: Path) -> tuple[float, float] | None:
     """First and last audible sound, from the level (Whisper's word starts run early)."""
     duration, _ = probe(video)
@@ -332,6 +365,18 @@ class Job:
     pop_sound: bool = True
     pop_volume: float = 0.35
     audio_fix: bool = True
+    ## A cleaned voice on the raw clip's clock (``denoise.clean_voice``) instead of the clip's sound.
+    voice: Path | None = None
+    ## The kept segments (``cuts.Timeline``); overrides ``trim``.
+    keep: Timeline | None = None
+    layout: Layout = field(default_factory=Layout)
+    ## The second clip of ``stack`` and ``pip``, and its track (empty: the whole clip fitted to the cut).
+    screen: Path | None = None
+    screen_spans: list[ScreenSpan] = field(default_factory=list)
+    ## A headline across the top of the safe zone, for the first ``title_until`` seconds or throughout.
+    title: str | None = None
+    title_font: Path | None = None
+    title_until: float | None = None
 
 
 @dataclass(frozen=True)
@@ -344,49 +389,155 @@ class Result:
     warnings: list[str]
 
 
-def shift_cues(cues: list[Cue], t0: float, t1: float) -> list[Cue]:
-    """The cues seen in the cut ``t0``–``t1`` of the raw clip, on the cut's own clock."""
-    return [replace(c, start=max(0.0, c.start - t0), end=min(t1 - t0, c.end - t0))
-            for c in cues if c.end > t0 and c.start < t1]
+def _fit(src: str, fit: str) -> str:
+    """The graph that fits one clip into the whole frame: cropped, or on a blurred copy of itself."""
+    if fit == "crop":
+        return f"{src}scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={FPS}[v0]"
+    return (
+        f"{src}fps={FPS},split[a][b];"
+        f"[a]scale={W // 4}:{H // 4}:force_original_aspect_ratio=increase,crop={W // 4}:{H // 4},"
+        f"gblur=sigma=12,eq=brightness=-0.06,scale={W}:{H}[bg];"
+        f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease,setsar=1[fg];"
+        f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[v0]"
+    )
+
+
+def _still_input(image: Path, length: float) -> list[str]:
+    return ["-loop", "1", "-framerate", str(FPS), "-t", f"{length:.3f}", "-i", str(image)]
+
+
+def _segments(job: Job, timeline: Timeline, inputs: list[str], pre: str, has_audio: bool,
+              work: Path) -> tuple[list[str], list[str]]:
+    """The graph for a clip cut into several segments, or laid out with a second clip: every segment
+    is its own input, picture and sound are joined together so they stay in step, and the result is
+    ``[v0]`` (and ``[acat]``). Also returns the graph of the sound alone, for the measuring passes."""
+    layout, segs = job.layout, timeline.segments
+    n, duration = len(segs), timeline.duration
+    for source in [job.video] + ([job.voice] if job.voice is not None else []):
+        for a, b in segs:
+            inputs += ["-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", str(source)]
+    sl, st, sr, sb = SAFE
+    upper = 2 * round(H * layout.split / 2)
+    bubble = 2 * round(W * layout.bubble / 2)
+    field_size = {"full": (W, H), "stack": (W, H - upper), "pip": (bubble, bubble)}[layout.kind]
+    cropped = layout.kind != "full" or job.fit == "crop"
+    anchor = (0.5, 0.5) if layout.kind == "full" else layout.face_anchor
+    graph, sound = [], []
+    for k, (a, b) in enumerate(segs):
+        zoom = 1 + layout.punch if k % 2 else 1.0
+        shape = panel(*field_size, anchor, zoom) if cropped else "setsar=1"
+        graph.append(f"[{k}:v]{pre}fps={FPS},{shape}[f{k}]")
+        if has_audio:
+            ## 15 ms fades so a cut does not click.
+            sound.append(f"[{(n if job.voice is not None else 0) + k}:a]aresample=48000,afade=t=in:d=0.015,"
+                         f"afade=t=out:st={b - a - 0.015:.3f}:d=0.015[a{k}]")
+    graph += sound
+    face = "v0" if layout.kind == "full" and cropped else "face"
+    graph.append("".join(f"[f{k}]" + (f"[a{k}]" if has_audio else "") for k in range(n))
+                 + f"concat=n={n}:v=1:a={int(has_audio)}[{face}]" + ("[acat]" if has_audio else ""))
+    sound = sound + ["".join(f"[a{k}]" for k in range(n)) + f"concat=n={n}:v=0:a=1[acat]"]
+    if layout.kind == "full":
+        if not cropped:
+            graph.append(_fit("[face]", "blur"))
+        return graph, sound
+
+    if job.screen is None:
+        raise VideoError(f"layout {layout.kind}: needs the second clip")
+    source_duration, _ = probe(job.screen)
+    screen_pre = TONEMAP if transfer(job.screen) in HDR_TRANSFERS else ""
+    screen_size = (W, upper) if layout.kind == "stack" else (W, H)
+    shown = slots(job.screen_spans, timeline, source_duration)
+    for j, slot in enumerate(shown):
+        inputs += ["-ss", f"{slot.source_start:.3f}", "-t", f"{slot.source_length:.3f}", "-i", str(job.screen)]
+        graph.append(f"[{inputs.count('-i') - 1}:v]{screen_pre}setpts=(PTS-STARTPTS)/{slot.speed:.5f},fps={FPS},"
+                     f"{panel(*screen_size, slot.focus)},tpad=stop_mode=clone:stop_duration={slot.length:.3f},"
+                     f"trim=duration={slot.length:.3f},setpts=PTS-STARTPTS,format=yuv420p[s{j}]")
+        print(f"     screen {j + 1}: {slot.source_start:.2f} s for {slot.length:.2f} s"
+              + (f", {slot.speed:.2f}x" if slot.speed > 1.005 else ""))
+    graph.append("".join(f"[s{j}]" for j in range(len(shown))) + f"concat=n={len(shown)}:v=1:a=0[screen]")
+    if layout.kind == "stack":
+        graph.append("[face]format=yuv420p[facev];[screen][facev]vstack=inputs=2[v0]")
+        return graph, sound
+    mask, ring = work / "bubble-mask.png", work / "bubble-ring.png"
+    bubble_images(bubble, mask, ring)
+    inputs += _still_input(mask, duration) + _still_input(ring, duration)
+    last = inputs.count("-i") - 1
+    x = round(sl + layout.bubble_anchor[0] * (sr - sl - bubble))
+    y = round(st + layout.bubble_anchor[1] * (sb - st - bubble))
+    graph.append(f"[{last - 1}:v]format=gray[bm];[face][bm]alphamerge[fb];"
+                 f"[screen][fb]overlay={x}:{y}:format=auto[pb];[pb][{last}:v]overlay={x}:{y}:format=auto[v0]")
+    return graph, sound
 
 
 def render(job: Job) -> Result:
     """Render ``job`` to ``job.out``; cues and words come back on the cut's clock."""
     raw_duration, has_audio = probe(job.video)
-    t0, t1 = job.trim or (0.0, raw_duration)
-    duration = t1 - t0
-    cues = shift_cues(job.cues, t0, t1)
-    words = shift(job.words or [], t0, t1)
+    timeline = job.keep or Timeline((job.trim or (0.0, raw_duration),))
+    t0, duration = timeline.segments[0][0], timeline.duration
+    cues = timeline.clip(job.cues)
+    words = timeline.clip(job.words or [])
     warnings: list[str] = []
+    ## One uncut clip alone in the frame goes through the graph it always did.
+    simple = len(timeline.segments) == 1 and job.layout.kind == "full"
+    upper = 2 * round(H * job.layout.split / 2)
 
     work = Path(tempfile.mkdtemp(prefix="asset-video-"))
     try:
-        inputs = ["-ss", f"{t0:.3f}", "-t", f"{duration:.3f}", "-i", str(job.video)]
-        src = "[0:v]hflip[src];[src]" if job.mirror else "[0:v]"
-        if job.fit == "crop":
-            graph = [f"{src}scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,fps={FPS}[v0]"]
+        has_audio = has_audio or job.voice is not None
+        hdr = transfer(job.video) in HDR_TRANSFERS
+        if hdr:
+            print("     HDR source: tone-mapped to SDR BT.709")
+        if simple:
+            inputs = ["-ss", f"{t0:.3f}", "-t", f"{duration:.3f}", "-i", str(job.video)]
+            if job.voice is not None:
+                inputs += ["-ss", f"{t0:.3f}", "-t", f"{duration:.3f}", "-i", str(job.voice)]
+            src = "[0:v]" + (TONEMAP.rstrip(",") + "[sdr];[sdr]" if hdr else "")
+            src = src + "hflip[src];[src]" if job.mirror else src
+            graph, sound = [_fit(src, job.fit)], []
         else:
-            graph = [
-                f"{src}fps={FPS},split[a][b];"
-                f"[a]scale={W // 4}:{H // 4}:force_original_aspect_ratio=increase,crop={W // 4}:{H // 4},"
-                f"gblur=sigma=12,eq=brightness=-0.06,scale={W}:{H}[bg];"
-                f"[b]scale={W}:{H}:force_original_aspect_ratio=decrease,setsar=1[fg];"
-                f"[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1[v0]"
-            ]
+            if job.layout.punch and job.layout.kind == "full" and job.fit != "crop":
+                warnings.append("punch-in needs --fit crop or a layout with fields; left out")
+            inputs = []
+            graph, sound = _segments(job, timeline, inputs,
+                                     (TONEMAP if hdr else "") + ("hflip," if job.mirror else ""), has_audio, work)
+            print(f"     {len(timeline.segments)} segments, {duration:.2f} s of {raw_duration:.2f} s")
 
         last = "v0"
         for i, cue in enumerate(cues):
-            x, y, found = render_plop(cue, work / f"plop{i}")
-            warnings += found
-            inputs += ["-framerate", str(FPS), "-i", str(work / f"plop{i}" / "%05d.png")]
-            graph.append(f"[{inputs.count('-i') - 1}:v]setpts=PTS-STARTPTS+{cue.start}/TB[p{i}]")
+            if cue.full:
+                length = cue.end - cue.start
+                inputs += (["-t", f"{length:.3f}", "-i", str(cue.image)] if cue.image.suffix.lower() in VIDEO_SUFFIXES
+                           else _still_input(cue.image, length))
+                graph.append(f"[{inputs.count('-i') - 1}:v]fps={FPS},{panel(W, H, (0.5, 0.5))},"
+                             f"setpts=PTS-STARTPTS+{cue.start}/TB[p{i}]")
+                x = y = 0
+                print(f"     cutaway {i + 1}: {cue.image.name} {cue.start:.2f}–{cue.end:.2f} s")
+            else:
+                x, y, found = render_plop(cue, work / f"plop{i}")
+                warnings += found
+                inputs += ["-framerate", str(FPS), "-i", str(work / f"plop{i}" / "%05d.png")]
+                graph.append(f"[{inputs.count('-i') - 1}:v]setpts=PTS-STARTPTS+{cue.start}/TB[p{i}]")
+                print(f"     pop {i + 1}: {cue.image.name} {cue.start:.2f}–{cue.end:.2f} s at ({x}, {y})")
             graph.append(f"[{last}][p{i}]overlay={x}:{y}:eof_action=pass:format=auto[v{i + 1}]")
             last = f"v{i + 1}"
-            print(f"     pop {i + 1}: {cue.image.name} {cue.start:.2f}–{cue.end:.2f} s at ({x}, {y})")
+
+        if job.title:
+            if job.title_font is None:
+                raise VideoError("a title needs its face (the engine holds none)")
+            sl, st, sr, _ = SAFE
+            card = work / "title.png"
+            tw, _ = title_card(job.title, job.title_font, card, width=sr - sl)
+            inputs += _still_input(card, duration)
+            until = f":enable='lte(t,{job.title_until:.2f})'" if job.title_until else ""
+            graph.append(f"[{last}][{inputs.count('-i') - 1}:v]overlay={sl + (sr - sl - tw) // 2}:{st + 30}"
+                         f":format=auto{until}[vt]")
+            last = "vt"
 
         if job.words is not None:
             ass = work / "captions.ass"
-            captions_ass(words, ass, width=W, height=H, baseline=CAPTION_BASELINE)
+            ## Stacked, the captions sit on the seam: over the lower edge of the second clip.
+            baseline = upper + 56 if job.layout.kind == "stack" else CAPTION_BASELINE
+            captions_ass(words, ass, width=W, height=H, baseline=baseline)
             esc = str(ass).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
             graph.append(f"[{last}]subtitles='{esc}'[vc]")
             last = "vc"
@@ -394,10 +545,14 @@ def render(job: Job) -> Result:
 
         audio, loudness = [], None
         if has_audio:
-            chain = VOICE_CHAIN if job.audio_fix else "anull"
-            ## 15 ms fades so a cut does not click.
-            fades = f",afade=t=in:d=0.015,afade=t=out:st={duration - 0.015:.3f}:d=0.015" if job.trim else ""
-            audio.append(f"[0:a]aresample=48000,{chain}{fades}[voice]")
+            chain = (CLEANED_VOICE_CHAIN if job.voice is not None else VOICE_CHAIN) if job.audio_fix else "anull"
+            if simple:
+                ## 15 ms fades so a cut does not click.
+                fades = f",afade=t=in:d=0.015,afade=t=out:st={duration - 0.015:.3f}:d=0.015" if job.trim else ""
+                source = "[1:a]" if job.voice is not None else "[0:a]"
+                audio.append(f"{source}aresample=48000,{chain}{fades}[voice]")
+            else:
+                audio.append(f"[acat]{chain}[voice]")
             label = "voice"
             pops = [c for c in cues if c.pop_sound] if job.pop_sound else []
             if pops:
@@ -412,11 +567,12 @@ def render(job: Job) -> Result:
                              f"amix=inputs={len(pops) + 1}:duration=first:normalize=0[mix]")
                 label = "mix"
             if job.audio_fix:
-                measured = _loudness(inputs, ";".join(audio), label)
+                measured = _loudness(inputs, ";".join(sound + audio), label)
                 gain = TARGET_LUFS - measured
                 print(f"     loudness {measured:.1f} LUFS, {gain:+.1f} dB")
                 for _ in range(3):
-                    loudness = _loudness(inputs, ";".join(audio + [f"[{label}]volume={gain:.2f}dB,{LIMITER}[lim]"]), "lim")
+                    loudness = _loudness(inputs, ";".join(sound + audio + [f"[{label}]volume={gain:.2f}dB,{LIMITER}[lim]"]),
+                                         "lim")
                     print(f"     behind the limiter {loudness:.1f} LUFS")
                     if abs(TARGET_LUFS - loudness) < 0.3:
                         break
@@ -432,6 +588,7 @@ def render(job: Job) -> Result:
             "-filter_complex", ";".join(graph + audio),
             "-map", "[vout]", *(["-map", "[aout]"] if has_audio else []),
             "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-r", str(FPS),
+            *(["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"] if hdr else []),
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
             "-movflags", "+faststart", "-t", f"{duration:.3f}", str(job.out),
         ], check=True)
@@ -446,5 +603,34 @@ def still(video: Path, at: float, out: Path) -> None:
                     "-frames:v", "1", "-q:v", "2", str(out)], check=True)
 
 
-__all__ = ["Cue", "Job", "Result", "VideoError", "cut_range", "parse_cues", "probe", "recording_date", "render",
-           "shift_cues", "speech_bounds", "still"]
+def cover(video: Path, at: float, out: Path, *, title: str, font: Path, mirror: bool = False) -> None:
+    """The frame at ``at`` of the **raw** clip (so no caption is burned in), tone-mapped and mirrored
+    as the render is and cropped to the frame, with ``title`` set large in white across the top of the
+    safe zone over a darkened top. Up to three lines, as large as the zone's width allows."""
+    vf = (TONEMAP if transfer(video) in HDR_TRANSFERS else "") + ("hflip," if mirror else "") \
+        + f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}"
+    with tempfile.TemporaryDirectory(prefix="asset-cover-") as tmp:
+        frame = Path(tmp) / "frame.png"
+        subprocess.run([ffmpeg(), "-hide_banner", "-y", "-loglevel", "error", "-ss", f"{at:.3f}", "-i", str(video),
+                        "-vf", vf, "-frames:v", "1", str(frame)], check=True)
+        img = Image.open(frame).convert("RGB")
+    sl, st, sr, sb = SAFE
+    ## The darkening: full at the top, gone by the middle of the frame.
+    shade = Image.new("L", (1, H))
+    for y in range(H):
+        shade.putpixel((0, y), round(170 * max(0.0, 1 - y / (H * 0.5)) ** 1.6))
+    img.paste(Image.new("RGB", (W, H), (0, 0, 0)), (0, 0), shade.resize((W, H)))
+
+    draw = ImageDraw.Draw(img)
+    face, lines, size = fit_lines(draw, title, font, sr - sl, sizes=range(150, 40, -4), max_lines=3)
+    stroke, leading = max(4, size // 14), round(size * 1.12)
+    y = st + 40
+    for line in lines:
+        draw.text((sl, y), line, font=face, fill="white", stroke_width=stroke, stroke_fill=(0, 0, 0))
+        y += leading
+    out.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out, quality=92)
+
+
+__all__ = ["Cue", "Job", "Result", "VideoError", "cover", "cut_range", "parse_cues", "probe", "recording_date",
+           "render", "silences", "speech_bounds", "still", "transfer"]

@@ -9,7 +9,7 @@ Renders the image assets every app in this workspace needs from the app's own de
 - **Trade-fair roll-ups**: in a print shop's exact data format, composed from an element list and checked against the rules that decide whether a banner works at a stand.
 - **Profile banners** (LinkedIn 1584×396): composed from an element list and checked against where the platform covers it with the profile photo or crops it on phones.
 - **App icons**: drafts drawn by an image model from a description, and every platform's icon file (iOS, Play, Android adaptive layers, splash, favicon) derived from the draft the app chose.
-- **Short vertical videos** (standalone, no app): a talking-head clip with pictures popping in on cue, word-by-word captions and a cleaned-up voice at −14 LUFS, cut to the speech.
+- **Short vertical videos** (standalone, no app): a talking-head clip with pictures and cutaways on cue, word-by-word captions and a cleaned-up voice at −14 LUFS; retakes removed and pauses shortened; alone in the frame, stacked under a screen recording, or in a bubble over it; a headline across the top.
 
 The engine is the code. The definitions stay in the app's repo: layouts as JSON, captions per
 locale, the plain app captures, the brand faces and the store pages. The app hands them over as an
@@ -43,7 +43,7 @@ it.
 | `asset_engine.rollups` | print-shop formats (`printers.json`), the element list (`config`, `compose`), the rules (`rules`), CLI |
 | `asset_engine.banners` | platform formats and their photo and crop zones (`platforms.json`), the element list (`config`, `compose`), the zone checks (`rules`), CLI |
 | `asset_engine.logos` | icon targets and their safe circles (`platforms.json`), the app's logo config (`config`), the draft prompt (`prompt`), drafts from the app's image model (`generate`), the icon set from the master (`derive`), CLI |
-| `asset_engine.video` | cues, pops, cut, voice and the ffmpeg render (`render`), transcript cache, corrections, ASS and SRT captions (`captions`), what YouTube and TikTok accept for upload text (`platforms.json`), CLI |
+| `asset_engine.video` | cues, pops, voice and the ffmpeg render (`render`), removals, pauses and the cut's clock (`cuts`), the layouts, the second clip's track and the headline (`layout`), transcript cache, corrections, ASS and SRT captions (`captions`), what YouTube and TikTok accept for upload text (`platforms.json`), CLI |
 
 ## App Store creatives
 
@@ -220,8 +220,54 @@ Standalone: it needs no app and no `AssetProject`. Install the extra once
   captions are drawn. The transcript is made once with Whisper into `words.json` beside the cue file.
 - **`--trim auto`** cuts from 0.2 s before the first sound to 0.35 s after the last, measured on
   the level. **`--mirror`** undoes a selfie camera's mirroring.
+- **Cuts inside the clip.** `words` prints the transcript with times and pauses; from it the removals
+  are written into a file, one per line in the raw clip's time, and passed as `--cuts`:
+
+  ```
+  26.60 - 34.10   # first take of the sentence
+  ```
+
+  `--tighten [SECONDS]` shortens every pause to that length (0.35 s), half kept at each side; a
+  removal that touches silence leaves the same single pause. Cues, words and the second clip's track
+  stay in the raw clip's time and are moved onto the cut by the render. `--punch 0.08` enlarges every
+  second segment, so a cut reads as a change of shot (in a field, or with `--fit crop`).
+- **Layouts.** `--layout stack --screen REC.mp4` puts a second clip above the speaker (`--split`, the
+  upper field's share, default 0.6; `--face-anchor 50%,16%` says which part of the speaker stays),
+  with the captions on the seam. `--layout pip` fills the frame with the second clip and shows the
+  speaker in a bubble (`--bubble-anchor`). The second clip plays without sound. `--screen-track` ties
+  stretches of it to moments of the speech:
+
+  ```
+  00:00    von 00:21 bis 00:24   fokus=10%     # speech time, then the second clip's stretch
+  00:12.7  von 00:27 bis 00:30   fokus=10%
+  00:15.6  von 00:30             fokus=100%    # the lower end of a phone's screen
+  ```
+
+  A stretch longer than its slot is sped up to fit, a shorter one plays as recorded and holds its
+  last frame. Without a track the whole clip is fitted to the cut. `fokus` is the height of the
+  recording to look at: a phone's screen is taller than the field.
+- **Cutaways.** A cue with `voll` (`full`) fills the frame for its time; a video as a cue's file is
+  always shown that way, without its sound.
+- **Headline.** `--title "…" --title-font face.ttf` sets dark type on a white box across the top of
+  the safe zone, throughout or for `--title-until` seconds.
+- A caption group that would reach past the frame's edge (a long German compound) is drawn narrower.
+- **`--denoise`** separates the voice from wind and other changing noise with DeepFilterNet, once,
+  into `voice.wav` beside the cue file. The transcript, `--trim auto` and the render all read that
+  file, so a windy clip, where the level never drops to silence, still cuts. It needs DeepFilterNet's
+  standalone binary and model in the virtualenv:
+
+  ```bash
+  V=~/.pyenv/versions/asset-engine
+  curl -L -o $V/bin/deep-filter \
+    https://github.com/Rikorose/DeepFilterNet/releases/download/v0.5.6/deep-filter-0.5.6-x86_64-apple-darwin
+  chmod +x $V/bin/deep-filter       # aarch64-apple-darwin on Apple silicon
+  mkdir -p $V/share/deep-filter && curl -L -o $V/share/deep-filter/DeepFilterNet3_onnx.tar.gz \
+    https://github.com/Rikorose/DeepFilterNet/raw/v0.5.6/models/DeepFilterNet3_onnx.tar.gz
+  ```
+- **HDR clips** (iPhone HLG) are tone-mapped to SDR BT.709 on the way in.
 - **Output**, named after the camera's recording date: `2026-11-16_kalorien-app.mp4`, and beside it
-  `.srt` (caption track for YouTube), `.cover.jpg` (middle of the first picture, or `--cover-at`) and
+  `.srt` (caption track for YouTube), `.cover.jpg` (middle of the first picture, or `--cover-at`;
+  `--cover-title "…" --cover-font face.ttf` sets a headline across its top) and
   `.transcript.txt` (what is said and shown, on the cut's clock). `sidecars` writes only these three
   for an existing render.
 - **Upload text**: written by hand (in a Claude session) from the transcript, into
