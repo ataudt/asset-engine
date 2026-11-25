@@ -70,12 +70,14 @@ from asset_engine.store.feature_graphic import (
     read_headlines,
 )
 from asset_engine.store.config import (
+    PHONE,
     ScreenshotConfig,
     Slot,
     design_names,
     device_names,
     load_config,
 )
+from asset_engine.store.iphone import gallery_points_per_pixel, min_points, too_small
 from asset_engine.printing.report import Run, clear_outputs
 from asset_engine.store.fonts import FontCoverageError
 from asset_engine.store.output import save_frame
@@ -314,6 +316,21 @@ def _cmd_compose(args: argparse.Namespace) -> int:
     return run.summary()
 
 
+def _small_type(config: ScreenshotConfig, device: str, headline_size: int, has_subline: bool) -> list[str]:
+    """Headline or subline arriving below the minimum in the iPhone's gallery (``iphone.py``).
+    Only the phone set is measured: the iPad set is shown on an iPad, at another size."""
+    if device != PHONE:
+        return []
+    scale = gallery_points_per_pixel(config.canvas[0])
+    parts = {"headline": headline_size, **({"subline": config.subline.size} if has_subline else {})}
+    found = []
+    for part, size in parts.items():
+        points = too_small(size, scale)
+        if points is not None:
+            found.append(f"{part} {size}px arrives at {points:.1f} pt in the iPhone gallery, below {min_points():g} pt")
+    return found
+
+
 def _build_device(args: argparse.Namespace, device: str, variant: str, run: Run) -> None:
     """Render one page's set on one device for every requested locale, noting problems on ``run``."""
     config = load_config(device, _design(args), variant)
@@ -391,6 +408,9 @@ def _build_device(args: argparse.Namespace, device: str, variant: str, run: Run)
                         f"({layout.width}x{layout.height}px) — trim the caption"
                     ],
                 )
+            small = _small_type(config, device, layout.size, slot.caption in sublines)
+            if small:
+                run.warn(label, small)
             if image is not None:
                 ## Format and encoder settings live in ``output.save_frame`` — every writer and
                 ## every downstream glob has to agree on the extension.
@@ -427,8 +447,10 @@ def _report_device(args: argparse.Namespace, device: str, variant: str) -> int:
 
     draw = ImageDraw.Draw(Image.new("RGB", config.canvas))
     problems = 0
+    scale = gallery_points_per_pixel(config.canvas[0]) if device == PHONE else None
     for lang in languages:
         captions = captions_by_language[lang]
+        sublines = read_sublines(lang, config)
         for slot in config.slots:
             caption = captions[slot.caption - 1]
             ## No mockup is composed here, so the layout uses the tightest band (worst case).
@@ -439,15 +461,24 @@ def _report_device(args: argparse.Namespace, device: str, variant: str) -> int:
                 label=f"{lang} slot {slot.caption}",
                 keep_lines=slot.keep_lines,
             )
+            small = _small_type(config, device, layout.size, slot.caption in sublines)
             if layout.overflows:
                 status, problems = "OVERFLOW", problems + 1
+            elif small:
+                status, problems = "TOO SMALL: " + "; ".join(small), problems + 1
             elif layout.shrunk:
                 status = "shrunk"
             else:
                 status = "ok"
+            ## Points in the iPhone's gallery, headline / subline; only the phone set is measured.
+            points = (
+                f"{layout.size * scale:.0f}/{config.subline.size * scale:.0f}"
+                if scale is not None and slot.caption in sublines
+                else f"{layout.size * scale:.0f}" if scale is not None else "-"
+            )
             print(
                 f"{variant:<13}{device:<7}{str(lang):<5}{slot.caption:<6}{len(layout.lines):<7}{layout.size:<7}"
-                f"{layout.width:<8}{layout.ink_top:<7}{layout.ink_bottom:<8}{status}"
+                f"{layout.width:<8}{layout.ink_top:<7}{layout.ink_bottom:<8}{points:<8}{status}"
             )
     return problems
 
@@ -458,12 +489,12 @@ def _cmd_report(args: argparse.Namespace) -> int:
     ## frame it inherits would read here as a caption with no artwork.
     base = load_config(design=_design(args))
     _report_unmapped(base, len(read_captions(get_project().source_locale, base)))
-    print(f"{'page':<13}{'dev':<7}{'lang':<5}{'slot':<6}{'lines':<7}{'size':<7}{'width':<8}{'top':<7}{'bottom':<8}status")
+    print(f"{'page':<13}{'dev':<7}{'lang':<5}{'slot':<6}{'lines':<7}{'size':<7}{'width':<8}{'top':<7}{'bottom':<8}{'pt':<8}status")
     problems = sum(
         _report_device(args, device, variant) for variant in variants for device in _devices(args)
     )
     if problems:
-        _log(f"{problems} caption(s) do not fit", stderr=True)
+        _log(f"{problems} caption(s) do not fit or are too small on an iPhone", stderr=True)
     return 1 if problems else 0
 
 

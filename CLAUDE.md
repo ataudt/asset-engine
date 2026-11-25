@@ -61,7 +61,13 @@ outputs in the apps (website screens, share cards) depend on it.
   read off Apple's, Android's, Play's, Expo's and Google Search's guides, with the date read.
 - `store/app_store_creatives.json` holds each App Store creative placement's accepted sizes, aspect,
   art safe area and formats exactly as Apple's specification states them, with the URL and the date
-  read. A layout that reaches past the safe area is fixed in the app's `creatives.json`.
+  read.
+- `store/app_store_iphone.json` holds what the App Store on an iPhone shows of them, measured on
+  screenshots with the date: the header's window and the overlays on it, a gallery frame's width in
+  points, and Apple's 11 pt type minimum. **The iPhone is the measure** (no app targets the Mac):
+  key art lies in the iPhone window where a placement has one, in the safe area where it has none,
+  and type arrives at 11 pt or more. A layout that fails is fixed in the app's `creatives.json` or
+  `config.json`; a measurement changes only on a new screenshot.
 - `banners/platforms.json` holds a platform's banner canvas and the zones its profile photo covers
   and its phone view crops, with the guides' URLs and the date read. LinkedIn publishes no figures,
   so the guides disagree; the file keeps the most cautious and names the rest.

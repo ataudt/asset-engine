@@ -34,7 +34,7 @@ store = ["PyJWT[crypto]>=2.8", "requests>=2.31"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-asset_engine = ["rollups/printers.json", "banners/platforms.json", "logos/platforms.json", "store/app_store_creatives.json", "video/platforms.json"]
+asset_engine = ["rollups/printers.json", "banners/platforms.json", "logos/platforms.json", "store/app_store_creatives.json", "store/app_store_iphone.json", "video/platforms.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

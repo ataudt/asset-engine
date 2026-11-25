@@ -16,11 +16,15 @@ Rules:
   - The phones show the reader's own captures, through the set's fallback chain. On these canvases a
     phone is drawn large enough for its interface to be read, unlike on the feature graphic, so a
     German reader is shown German screens wherever there are any.
-  - Every element with ``role: "key"`` (the default) must lie inside Apple's art safe area, judged
-    on the box it actually drew. ``"aux"`` marks the atmospheric art Apple lets run to the edges,
-    where some devices crop it.
-  - No finding withholds a file (``printing.report``): type that overflows and key art reaching past
-    the safe area are drawn as they fall and printed loudly. What cannot be drawn at all — a canvas
+  - Every element with ``role: "key"`` (the default) must lie where it is seen, judged on the box it
+    actually drew. The iPhone is the measure: where the placement has a measured iPhone view
+    (``iphone.iphone_view``), that is the window the phone shows, clear of what the App Store lays
+    over it; elsewhere it is Apple's art safe area, which also keeps what a Mac would crop.
+    ``"aux"`` marks art that may run past it and be cropped.
+  - Type in key art must arrive at ``iphone.min_points()`` or larger on the phone, headline and
+    subline each.
+  - No finding withholds a file (``printing.report``): type that overflows or is too small and key
+    art reaching past its zone are drawn as they fall and printed loudly. What cannot be drawn at all — a canvas
     Apple refuses, a caption that does not exist — is an error.
   - No alpha: the image is flattened to RGB. A placement that takes JPEG is written the way the
     frames are (``output.save_frame``); one that takes PNG only is written as PNG.
@@ -58,6 +62,7 @@ from asset_engine.store.config import (
 )
 from asset_engine.store.feature_graphic import Box, Ground, draw_blocks, parse_text_style
 from asset_engine.store.fonts import font_for_text
+from asset_engine.store.iphone import IphoneView, iphone_view, min_points, too_small
 from asset_engine.store.output import FRAME_SUFFIX, save_frame
 from asset_engine.store.render import _wrapped_lines, layout_headline
 
@@ -181,6 +186,10 @@ class Creative:
     @property
     def safe_area(self) -> Box:
         return self.spec.safe_area(self.canvas)
+
+    @property
+    def iphone(self) -> IphoneView | None:
+        return iphone_view(self.name)
 
 
 @dataclass(frozen=True)
@@ -321,6 +330,36 @@ def _outside(box: Box, zone: Box) -> list[str]:
     return [f"{edge} by {px}px" for edge, px in reach.items() if px > 0]
 
 
+def _overlaps(box: Box, other: Box) -> bool:
+    return box[0] < other[2] and other[0] < box[2] and box[1] < other[3] and other[1] < box[3]
+
+
+def _zone_findings(creative: Creative, item: Drawn) -> list[str]:
+    """Where a key element is not seen: past the iPhone window or under an overlay where the
+    placement has an iPhone view, past Apple's art safe area where it has none."""
+    assert item.box is not None
+    view = creative.iphone
+    if view is None:
+        safe = creative.safe_area
+        past = _outside(item.box, safe)
+        return [f"{item.id}: reaches past Apple's art safe area {list(safe)} — {', '.join(past)}"] if past else []
+    window = view.window(creative.canvas)
+    findings = []
+    past = _outside(item.box, window)
+    if past:
+        findings.append(f"{item.id}: reaches past what an iPhone shows {list(window)} — {', '.join(past)}")
+    for name, box in view.overlay_boxes(creative.canvas).items():
+        if _overlaps(item.box, box):
+            findings.append(f"{item.id}: lies under the iPhone's {name} {list(box)}")
+    return findings
+
+
+def _points_per_pixel(creative: Creative) -> float | None:
+    """Points on the phone per canvas pixel, where the placement has a measured iPhone view."""
+    view = creative.iphone
+    return None if view is None else view.points_per_pixel(creative.canvas)
+
+
 def _draw_text(
     draw: ImageDraw.ImageDraw,
     text: CreativeText,
@@ -328,10 +367,10 @@ def _draw_text(
     subline: list[str] | None,
     *,
     label: str,
-) -> tuple[Box | None, str]:
+) -> tuple[Box | None, str, dict[str, int]]:
     """Set one caption, and its subline under it, the way a frame does (``render.render_slot``):
     the band is shortened by what the subline needs first, so the two are centred as one block.
-    Returns the inked box and why it overflowed, if it did."""
+    Returns the inked box, why it overflowed, if it did, and the pixel size each part was set in."""
     style = text.style
     band_bottom = style.fallback_band_bottom
     small_font: ImageFont.FreeTypeFont | None = None
@@ -360,7 +399,10 @@ def _draw_text(
         if layout.overflows
         else ""
     )
-    return _union(inked), overflow
+    sizes = {"headline": layout.size}
+    if small_lines:
+        sizes["subline"] = text.subline.size  # type: ignore[union-attr]
+    return _union(inked), overflow, sizes
 
 
 def compose_creative(
@@ -411,7 +453,7 @@ def compose_creative(
                     f"[{language}] {creative.name}: caption {text.caption} does not exist — the set has {len(captions)}"
                 )
             element = f"caption {text.caption}"
-            box, overflow = _draw_text(
+            box, overflow, sizes = _draw_text(
                 draw,
                 text,
                 captions[text.caption - 1],
@@ -421,14 +463,20 @@ def compose_creative(
             drawn.append(Drawn(id=element, role=text.role, box=box))
             if overflow:
                 findings.append(f"{element}: {overflow}")
+            scale = _points_per_pixel(creative)
+            if scale is not None and text.role == "key":
+                for part, size in sizes.items():
+                    points = too_small(size, scale)
+                    if points is not None:
+                        findings.append(
+                            f"{element} {part}: {size}px arrives at {points:.1f} pt on an iPhone, "
+                            f"below the {min_points():g} pt minimum"
+                        )
 
-    safe = creative.safe_area
     for item in drawn:
         if item.role != "key" or item.box is None:
             continue
-        past = _outside(item.box, safe)
-        if past:
-            findings.append(f"{item.id}: reaches past Apple's art safe area {list(safe)} — {', '.join(past)}")
+        findings.extend(_zone_findings(creative, item))
     return ComposedCreative(creative=creative, image=image, drawn=drawn, findings=findings)
 
 
@@ -436,24 +484,49 @@ def compose_creative(
 GUIDES_WIDTH = 1920
 
 
+def _dashed_rectangle(draw: ImageDraw.ImageDraw, box: Box, color: tuple[int, ...], *, width: int, dash: int = 14) -> None:
+    left, top, right, bottom = box
+    for x in range(left, right, dash * 2):
+        draw.line([(x, top), (min(x + dash, right), top)], fill=color, width=width)
+        draw.line([(x, bottom), (min(x + dash, right), bottom)], fill=color, width=width)
+    for y in range(top, bottom, dash * 2):
+        draw.line([(left, y), (left, min(y + dash, bottom))], fill=color, width=width)
+        draw.line([(right, y), (right, min(y + dash, bottom))], fill=color, width=width)
+
+
 def guides(composed: ComposedCreative) -> Image.Image:
-    """The creative at ``GUIDES_WIDTH``: what Apple may crop dimmed, its art safe area in cyan, the
-    key elements' boxes in magenta and the auxiliary ones' in orange."""
+    """The creative at ``GUIDES_WIDTH``, with what key art must stay inside left bright and the
+    rest dimmed. Where the placement has an iPhone view that is the phone's window (green), with the
+    App Store's overlays on it (red) and Apple's art safe area dashed in cyan for reference; elsewhere
+    it is the art safe area (cyan). Key elements' boxes in magenta, auxiliary ones' in orange."""
     image = composed.image
+    creative = composed.creative
     scale = GUIDES_WIDTH / image.width
     sheet = image.resize((GUIDES_WIDTH, round(image.height * scale)), Image.LANCZOS).convert("RGBA")
 
     def scaled(box: Box) -> Box:
         return (round(box[0] * scale), round(box[1] * scale), round(box[2] * scale), round(box[3] * scale))
 
-    safe = scaled(composed.creative.safe_area)
+    safe = scaled(creative.safe_area)
+    view = creative.iphone
+    zone = safe if view is None else scaled(view.window(creative.canvas))
     veil = Image.new("RGBA", sheet.size, (0, 0, 0, 120))
-    ImageDraw.Draw(veil).rectangle(safe, fill=(0, 0, 0, 0))
+    ImageDraw.Draw(veil).rectangle(zone, fill=(0, 0, 0, 0))
     sheet.alpha_composite(veil)
     draw = ImageDraw.Draw(sheet)
-    draw.rectangle(safe, outline=(0, 230, 255, 255), width=3)
     font = ImageFont.load_default(size=18)
-    draw.text((safe[0] + 6, safe[1] + 4), "art safe area", fill=(0, 230, 255, 255), font=font)
+    cyan = (0, 230, 255, 255)
+    if view is None:
+        draw.rectangle(safe, outline=cyan, width=3)
+        draw.text((safe[0] + 6, safe[1] + 4), "art safe area", fill=cyan, font=font)
+    else:
+        green, red = (40, 220, 90, 255), (255, 50, 50, 255)
+        _dashed_rectangle(draw, safe, cyan, width=2)
+        draw.text((safe[0] + 6, safe[3] - 24), "art safe area (iPad, Mac)", fill=cyan, font=font)
+        draw.rectangle(zone, outline=green, width=3)
+        draw.text((zone[0] + 6, zone[3] - 24), "iPhone", fill=green, font=font)
+        for overlay in view.overlay_boxes(creative.canvas).values():
+            draw.rectangle(scaled(overlay), outline=red, width=2)
     for item in composed.drawn:
         if item.box is None:
             continue

@@ -1,0 +1,40 @@
+{
+  "_comment": [
+    "How the App Store app on an iPhone shows the store assets: measured on screenshots of a live product",
+    "page, not specified by Apple. The iPhone is what the apps are made for (none targets the Mac), so",
+    "where a placement has a measurement here, its key art is judged against what the iPhone shows",
+    "instead of Apple's art safe area (app_store_creatives.json), which is the part every device keeps,",
+    "the Mac included, and leaves the iPhone header two thirds empty. A placement without one stays on",
+    "the safe area until someone measures it.",
+    "`header.aspect`: the iPhone shows the middle of the header at this aspect, in full height.",
+    "`header.measured`: that window in the screenshot's pixels; `overlays` are boxes in the same pixels",
+    "(left, top, right, bottom) of what the App Store lays over it, where no type or wish may sit. The",
+    "status bar runs the full width down to 150 px (50 pt): between its time and battery sits the notch",
+    "or the Dynamic Island (to 48 pt), which a screenshot does not show.",
+    "`header.points`: the window's width in points (the screenshot is @3x). With `measured` it turns a",
+    "canvas pixel into points on the phone.",
+    "`screenshots.frame_points`: the width in points of one portrait frame in the product page gallery,",
+    "whatever the frame's pixel width.",
+    "`min_points`: the smallest type Apple's Human Interface Guidelines allow (11 pt); type in key art",
+    "that arrives smaller on the phone is a finding."
+  ],
+  "_source": [
+    "iPhone screenshots 1170 x 2532 (@3x, 390 x 844 pt) of a live App Store product page, iOS 26, measured 2026-11-25:",
+    "header 1170 x 780 px from the top of the screen (exactly 3:2); gallery frame 681 x 1473 px at x 60.",
+    "https://developer.apple.com/design/human-interface-guidelines/typography (11 pt minimum)"
+  ],
+  "min_points": 11,
+  "header": {
+    "aspect": [3, 2],
+    "measured": [1170, 780],
+    "points": 390,
+    "overlays": {
+      "status bar": [0, 0, 1170, 150],
+      "back button": [46, 142, 181, 272],
+      "share button": [988, 142, 1123, 280]
+    }
+  },
+  "screenshots": {
+    "frame_points": 227
+  }
+}
