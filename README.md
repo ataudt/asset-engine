@@ -37,7 +37,7 @@ it.
 | Package | What |
 |---|---|
 | `asset_engine.project` | `AssetProject` and its product sections, `PageRegistry`, `set_project` / `get_project` |
-| `asset_engine.store` | slots, devices, designs and pages (`config`), composition (`compose`, `frame`), typesetting (`render`, `fonts`), captions, feature graphic, App Store creatives (`creatives`, Apple's figures in `app_store_creatives.json`), output format, CLI; the App Store Connect API (`connect`: client, asset upload, creative placement) |
+| `asset_engine.store` | slots, devices, designs and pages (`config`), composition (`compose`, `frame`), typesetting (`render`, `fonts`), captions, feature graphic, App Store creatives (`creatives`, Apple's figures in `app_store_creatives.json`), output format, CLI; publishing on both stores (`listing`, `publish`, `pull`; the App Store Connect API in `connect`, the Google Play Developer API in `play`) |
 | `asset_engine.printing` | what printed products share: `Sheet` (mm ↔ px, bleed, hidden strips and safety margin per edge), drawing pieces (`elements`), QR codes, forwarding pages (`links`), copy files, the PDF |
 | `asset_engine.flyers` | the two-page A6 flyer, CLI |
 | `asset_engine.rollups` | print-shop formats (`printers.json`), the element list (`config`, `compose`), the rules (`rules`), CLI |
@@ -84,24 +84,38 @@ box drawn in, under `_creative_guides/<lang>/` beside the sets.
 
 ### Placing them
 
-`asset_engine.store.connect` places the rendered files on an iOS version's localizations through the
-App Store Connect API, which fastlane's `deliver` does not model (install with the `store` extra).
-The engine holds no key: the app builds the client from its own config and passes its bundle id and
-the locales to place:
+The creatives are placed with the listing (`python -m marketing.publish listing --store apple`, see
+"Publishing on the stores" below): each image is filed under a reference name carrying its file's
+MD5, so a run sends only what changed, and placements ride the version: they are reviewed with it.
+
+## Publishing on the stores
+
+`asset_engine.store.publish` puts an app on the App Store and Google Play from its listing source
+(install with the `store` extra). An app gives it one `PublishFiles` in its `AssetProject` — store
+ids, the locale tags per store, the keys as callables, optionally a page reader for custom pages —
+and runs the CLI through a one-line shim:
 
 ```python
-from asset_engine.store.connect import AppStoreConnectClient
-from asset_engine.store.connect.creatives import upload_creatives
-
-client = AppStoreConnectClient(key_getter=get_app_store_connect_api_key)  # the app's config getter
-upload_creatives(client=client, bundle_id="com.example.app", locales={"en": "en-US", "de": "de-DE"},
-                 execute=False)  # a plan; execute=True places
+## marketing/publish/__main__.py in the app
+import sys
+from asset_engine.store.publish import main
+sys.exit(main(prog="python -m marketing.publish"))
 ```
 
-Each image is filed under a reference name carrying its file's MD5, so a run sends only what
-changed, and placements ride the version: they are reviewed with it. `client.py` takes
-`forbidden_resources` for a caller that must never write the main listing (custom product pages);
-`assets.py` also uploads screenshot sets.
+| Command | What it does |
+|---|---|
+| `listing --store apple\|play` | Texts, screenshots (compared by checksum), What's New; Apple also review details, categories, copyright and the creative assets |
+| `promo --store apple` | The promotional text on the live version |
+| `record --store apple` | Content rights, age rating, availability, free price, the build, store languages |
+| `subscriptions --store apple\|play` | Products, base plans, prices, introductory offers |
+| `custom-pages --store apple\|play` | Apple custom product pages as drafts; Play's paste bundle for custom listings |
+| `pull --store apple\|play` | Writes `store.json` and `subscriptions.json` from what the stores hold |
+
+The source is the app's `appstore/`: `locales/<code>/<page>/listing.json` and `keywords.json`,
+`locales.config.json` (caps), `update/apple.md` and `update/google.md` (What's New), `store.json`
+(territories, regions, record settings), `subscriptions.json`, and optionally `age_rating.json` and
+`review_information.json`. Every command reads the store first and plans; `--apply` writes only what
+differs, and `--check` exits 2 when the plan is not empty.
 
 ## Roll-ups
 

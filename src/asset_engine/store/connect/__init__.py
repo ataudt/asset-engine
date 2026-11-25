@@ -1,11 +1,13 @@
-"""The App Store Connect API, for the store work ``deliver`` cannot do.
+"""The App Store Connect API: everything an app publishes on the App Store but its binary.
 
-Layer: asset engine, store upload. Needs the ``store`` extra (PyJWT, requests).
+Layer: asset engine, store publishing. Needs the ``store`` extra (PyJWT, requests, google-auth).
 
-fastlane covers an app's main listing. What it does not model is the **App Asset Library**, through
-which the creative assets (product page header, search results image) are placed on a version's
-localizations (``creatives``), nor custom product pages, which an app builds on ``client`` and
-``assets``. The engine holds no key: the app builds the client with its own ``key_getter``.
+``client`` is the authenticated HTTP; ``app`` finds the record, its version and its settings;
+``listing`` writes the localizations, screenshots and review details (in place of fastlane's
+``deliver``); ``record`` the rest of the record; ``subscriptions`` the products and prices;
+``creatives`` places the creative assets through the App Asset Library; ``assets`` is the upload
+under all of them, and custom product pages build on it. The engine holds no key: the app hands it
+over as ``PublishFiles.apple_key``. The binary is EAS's (``eas submit``).
 """
 
 from asset_engine.store.connect.client import (

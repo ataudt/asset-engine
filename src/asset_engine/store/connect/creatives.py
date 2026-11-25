@@ -41,6 +41,12 @@ from asset_engine.store.connect.assets import (
     checksum,
     upload_library_images,
 )
+from asset_engine.store.connect.app import (
+    EDITABLE_VERSION_STATES,
+    LIVE_VERSION_STATES,
+    resolve_app,
+    version_state,
+)
 from asset_engine.store.connect.client import AppStoreConnectClient, AppStoreConnectError
 from asset_engine.store.creatives import load_creatives_config
 
@@ -58,10 +64,6 @@ PLACEMENT_TYPES: dict[str, str] = {
 ## groups a version localization takes.
 APP_STORE_VERSIONS_FEATURE = "APP_STORE_VERSIONS"
 
-## A version Apple lets us edit: in preparation, or sent back.
-EDITABLE_VERSION_STATES = frozenset(
-    {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED"}
-)
 
 
 class CreativesIncomplete(RuntimeError):
@@ -99,6 +101,8 @@ class CreativesReport:
     lines: list[str] = field(default_factory=list)
     sent: int = 0
     unchanged: int = 0
+    ## Placements a plan would add or replace.
+    planned: int = 0
 
     def add(self, line: str) -> None:
         self.lines.append(line)
@@ -144,14 +148,6 @@ def rendered_creatives(locales: Mapping[str, str]) -> dict[str, dict[str, Path]]
 def reference_name(placement: str, locale: str, path: Path) -> str:
     """The name an image is filed under: what tells this render from any other on a later run."""
     return f"creative {placement} {locale} md5:{checksum(path.read_bytes())}"
-
-
-def resolve_app_id(client: AppStoreConnectClient, bundle_id: str) -> str:
-    """The App Store Connect id of the app with ``bundle_id``."""
-    rows = list(client.list_all("apps", **{"filter[bundleId]": bundle_id}))
-    if len(rows) != 1:
-        raise AppStoreConnectError(f"expected one App Store Connect app with bundle id {bundle_id}, got {len(rows)}")
-    return rows[0]["id"]
 
 
 ## -- what Apple accepts --------------------------------------------------------------------------
@@ -213,16 +209,6 @@ def placement_specs(client: AppStoreConnectClient) -> dict[str, PlacementSpec]:
 ## -- the version ---------------------------------------------------------------------------------
 
 
-def _version_state(version: dict) -> str:
-    attributes = version["attributes"]
-    return attributes.get("appVersionState") or attributes.get("appStoreState") or "?"
-
-
-## A version that is on the store. A plan with nothing in preparation reads this one, as the
-## `app_store_listing` dry run does: App Store Connect copies its placements into the next version.
-LIVE_VERSION_STATES = frozenset({"READY_FOR_DISTRIBUTION", "READY_FOR_SALE"})
-
-
 def find_version(
     client: AppStoreConnectClient, app_id: str, version_string: str | None, *, execute: bool = False
 ) -> dict:
@@ -236,10 +222,10 @@ def find_version(
         if not match:
             raise AppStoreConnectError(f"App Store Connect has no iOS version {version_string}")
         return match[0]
-    editable = [row for row in versions if _version_state(row) in EDITABLE_VERSION_STATES]
+    editable = [row for row in versions if version_state(row) in EDITABLE_VERSION_STATES]
     if editable:
         return editable[0]
-    live = [row for row in versions if _version_state(row) in LIVE_VERSION_STATES]
+    live = [row for row in versions if version_state(row) in LIVE_VERSION_STATES]
     if execute or not live:
         raise AppStoreConnectError("no iOS version in preparation — creatives are placed on one")
     return live[0]
@@ -320,9 +306,9 @@ def upload_creatives(
     if refusals:
         raise CreativesIncomplete("Apple would refuse:\n  " + "\n  ".join(refusals))
 
-    app_id = resolve_app_id(client, bundle_id)
+    app_id = resolve_app(client, bundle_id)["id"]
     version = find_version(client, app_id, version_string, execute=execute)
-    state = _version_state(version)
+    state = version_state(version)
     report.version = version["attributes"]["versionString"]
     if execute and state not in EDITABLE_VERSION_STATES:
         raise AppStoreConnectError(f"{report.version} is {state}, not editable — nothing placed")
@@ -345,6 +331,7 @@ def upload_creatives(
                 report.add(f"[{locale}] {name}: same")
                 continue
             report.add(f"[{locale}] {name}: {'replace' if placed else 'add'}")
+            report.planned += 1
             work.append((localization_id, name, path, name_for_render, placed))
     if not execute or not work:
         return report
@@ -391,6 +378,6 @@ __all__ = [
     "CreativesReport",
     "placement_specs",
     "rendered_creatives",
-    "resolve_app_id",
+    "find_version",
     "upload_creatives",
 ]

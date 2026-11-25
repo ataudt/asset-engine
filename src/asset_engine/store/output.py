@@ -4,9 +4,8 @@ Layer: asset engine (offline, CLI-driven).
 Imports: Pillow, stdlib.
 
 Everything downstream of the renderer reads ``FRAME_SUFFIX`` rather than spelling an extension,
-because the discovery globs, the destination names and the Fastfile all have to agree: a glob that
-names an extension the writer no longer produces finds nothing, and a release aborts in
-``delete_rendered_screenshot_sets!`` instead of uploading.
+because the discovery globs and the destination names have to agree: a glob that names an extension
+the writer no longer produces finds nothing, and publishing would refuse the locale as unrendered.
 """
 
 from __future__ import annotations
@@ -18,8 +17,8 @@ from pathlib import Path
 from PIL import Image
 
 ## Both stores take JPEG: Apple's screenshot specification lists .jpg/.jpeg/.png, and Play
-## documents "JPEG or 24-bit PNG (no alpha)". fastlane needs nothing either — supply globs
-## {png,jpg,jpeg} and deliver's AppScreenshot whitelists the same three. At q92/4:4:4 a frame is
+## documents "JPEG or 24-bit PNG (no alpha)"; publishing sends the bytes as they are (image/jpeg to
+## Play, Apple reads the type from the file). At q92/4:4:4 a frame is
 ## ~4x smaller than the PNG with no visible difference in the caption text, which is what makes the
 ## ~8 GB of gitignored build output affordable to keep and quick to upload.
 FRAME_SUFFIX = ".jpg"

@@ -46,7 +46,12 @@ IDEMPOTENT_METHODS = frozenset({"GET", "PUT", "PATCH", "DELETE"})
 
 
 class AppStoreConnectError(RuntimeError):
-    """A request Apple rejected, with its ``errors[].detail`` quoted."""
+    """A request Apple rejected, with its ``errors[].detail`` quoted. ``status`` is the HTTP status,
+    or ``None`` for an error raised here rather than answered by Apple."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class MainListingRefused(RuntimeError):
@@ -175,7 +180,7 @@ class AppStoreConnectClient:
                 time.sleep(delay)
                 continue
             if not response.ok:
-                raise AppStoreConnectError(f"{method} {url} — {_describe(response)}")
+                raise AppStoreConnectError(f"{method} {url} — {_describe(response)}", response.status_code)
             if response.status_code == 204 or not response.content:
                 return {}
             return response.json()
@@ -194,15 +199,39 @@ class AppStoreConnectClient:
         ## A payload for relationship endpoints, whose DELETE names the linkages to remove.
         return self.request("DELETE", path, payload=payload)
 
-    def list_all(self, path: str, **params: Any) -> Iterator[dict]:
-        """Every ``data`` row of a collection, following ``links.next``."""
+    def get_or_none(self, path: str, **params: Any) -> dict | None:
+        """``get``, with ``None`` for a resource that does not exist yet (404): a to-one relationship
+        nobody has created, such as an app's availability or a version's review detail."""
+        try:
+            return self.get(path, **params)
+        except AppStoreConnectError as error:
+            if error.status == 404:
+                return None
+            raise
+
+    def pages(self, path: str, **params: Any) -> Iterator[dict]:
+        """Every page of a collection, following ``links.next``, ``included`` kept."""
         page = self.get(path, **params)
         while True:
-            yield from page.get("data", [])
+            yield page
             nxt = (page.get("links") or {}).get("next")
             if not nxt:
                 return
             page = self.request("GET", nxt)
+
+    def list_all(self, path: str, **params: Any) -> Iterator[dict]:
+        """Every ``data`` row of a collection, following ``links.next``."""
+        for page in self.pages(path, **params):
+            yield from page.get("data", [])
+
+    def list_with_included(self, path: str, **params: Any) -> tuple[list[dict], dict[tuple[str, str], dict]]:
+        """Every ``data`` row and every ``included`` resource of a collection, the latter by (type, id)."""
+        rows: list[dict] = []
+        included: dict[tuple[str, str], dict] = {}
+        for page in self.pages(path, **params):
+            rows += page.get("data", [])
+            included.update({(row["type"], row["id"]): row for row in page.get("included", [])})
+        return rows, included
 
     def upload_asset_chunk(self, method: str, url: str, headers: dict[str, str], chunk: bytes) -> None:
         """A single ``uploadOperations`` entry.
@@ -214,7 +243,7 @@ class AppStoreConnectClient:
         response = self._send(method, url, headers=headers, data=chunk, timeout=self.timeout)
         if not response.ok:
             raise AppStoreConnectError(
-                f"{method} {url} — HTTP {response.status_code}: {response.text[:200]}"
+                f"{method} {url} — HTTP {response.status_code}: {response.text[:200]}", response.status_code
             )
 
 

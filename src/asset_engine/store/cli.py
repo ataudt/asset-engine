@@ -12,7 +12,7 @@ Rules:
   - ``--design`` is a single name and defaults to none: a bare ``build`` renders the look the
     stores get, into ``appstore/screenshots/default/<lang>/``. A design renders into
     ``appstore/screenshots/<design>/<lang>/``, so an experiment cannot be picked up by the
-    metadata builder or fastlane by accident — which is also why a design named after a store page
+    publishing by accident — which is also why a design named after a store page
     is refused: they share that level.
   - ``--variant`` names the store pages to render, repeatable and comma-separated, and ``default``
     — the app's own set — is one of them. Without it every page is rendered, ``default`` first: a
@@ -191,7 +191,7 @@ def _mockup_dir(args: argparse.Namespace, config: ScreenshotConfig, language: st
     """Where the text-free mockups for one locale go.
 
     Under one ``_mockups`` root rather than inside the set's own folder: the name is the whole
-    containment — no builder and no fastlane lane walks a path with it in — and putting it inside a
+    containment — publishing never walks a path with it in — and putting it inside a
     set's folder instead would place it where a locale goes, beside the frames a console upload is
     picked from. It mirrors the rendered tree below it: ``_mockups/<set>/<locale>``.
     """

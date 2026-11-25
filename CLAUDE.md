@@ -18,8 +18,24 @@ here is live there. Public on GitHub as `ataudt/asset-engine`; an app's `setup.p
 - The engine never imports an app. What it needs to ask (store pages, chip words) is a method on
   `PageRegistry` or a callable on `AssetProject`.
 - The engine holds no credentials and reads no `.env`. A model client is built by the app from its
-  own secrets and handed over as a callable (`LogoFiles.google_client`); so is the App Store Connect
-  key (`store.connect`, `AppStoreConnectClient(key_getter=…)`).
+  own secrets and handed over as a callable (`LogoFiles.google_client`); so are the store keys
+  (`PublishFiles.apple_key` / `play_key`, `AppStoreConnectClient(key_getter=…)`, `PlayClient`).
+
+# Publishing reads before it writes
+
+`asset_engine.store.publish` (an app's `python -m marketing.publish`) puts an app's listing and
+subscriptions on both stores from its listing source (`store.listing`: `appstore/locales/…`,
+`locales.config.json`, `update/{apple,google}.md`, `store.json`, `subscriptions.json`). It replaces
+the fastlane lanes and the listing builders the apps used to fork.
+
+- Every step reads the store first and plans. It writes only with `--apply`, and only what differs;
+  images are compared by checksum, so an identical image is never sent back into review. A plan
+  that finds nothing (`Report.changes == 0`, `--check`) is how a migration proves the repo describes
+  the store as it stands.
+- What a person decides in a console is reported, never forced: a billing period, a region taken
+  away from subscribers, a price raise for existing subscribers, a language removed.
+- Copy is taken as written. A value may differ per store (`{"apple": …, "android": …}`) where a
+  feature works differently on each platform; the engine never rewrites text.
 
 # Videos stand alone
 
@@ -84,9 +100,11 @@ outputs in the apps (website screens, share cards) depend on it.
 FieldFix (roll-ups) runs `asset_engine.rollups` through `python -m marketing.rollups`; after a
 change there, run `~/.pyenv/versions/fieldfix/bin/python -m pytest marketing/rollups` from
 `FieldFix-App/`. NutriSpy imports these modules directly (`asset_engine.store.config`, `.compose`, `.captions`,
-`.output`, …) from its metadata builders, website builders and tests; NutriSpy and kcalculate place
-their creatives and NutriSpy its custom product pages through `asset_engine.store.connect` (after a
-change there, also run kcalculate's suite and both apps' creatives plan). Renaming or reshaping a public
+`.output`, …) from its website builders and tests. All three store apps (NutriSpy, kcalculate, Wunschkalender) publish through
+`asset_engine.store.publish` (`python -m marketing.publish`), and their listing sweeps import
+`asset_engine.store.listing`. After a change in `store.listing`, `store.connect` or `store.play`, run
+the three suites and, in each app, the plans with `--check` (`listing`, `record`, `subscriptions`
+for both stores): a plan that is not empty where it was empty before is the regression. Renaming or reshaping a public
 name breaks them. Run NutriSpy's suite (`~/.pyenv/versions/nutrispy/bin/python -m pytest` from
 `NutriSpy-App/`) after any such change. Its sweeps are where most of this engine's coverage
 lives.

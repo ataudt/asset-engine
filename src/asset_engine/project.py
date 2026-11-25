@@ -7,11 +7,12 @@ Rules:
     the code is shared between apps and the definitions are not.
   - What the engine cannot know is asked of the project, never imported from the app: the locale
     set, the brand faces, the words a chip prints and the store pages (``PageRegistry``).
-  - The engine holds no credentials and reads no ``.env``. A model client is built by the app, from
-    its own secrets, and handed over as a callable (``LogoFiles.google_client``).
+  - The engine holds no credentials and reads no ``.env``. A model client or a store key is built by
+    the app, from its own secrets, and handed over as a callable (``LogoFiles.google_client``,
+    ``PublishFiles.apple_key`` / ``play_key``).
   - Each product is a section an app may leave out — an app with no store set has ``store=None``.
     Asking for a section the app did not give is an error naming it (``store_files()``,
-    ``flyer_files()``, ``rollup_files()``, ``banner_files()``, ``logo_files()``), never a guess; the fields themselves are ``None``.
+    ``flyer_files()``, ``rollup_files()``, ``banner_files()``, ``logo_files()``, ``publish_files()``), never a guess; the fields themselves are ``None``.
   - One project per process, installed at startup by ``set_project``; ``get_project`` raises until
     then rather than guessing one. The app's own package installs it, so every entry into the engine
     from that app passes through it.
@@ -80,6 +81,49 @@ class StoreFiles:
 
 
 @dataclass(frozen=True)
+class PublishFiles:
+    """Store publishing: where the listing source is, the store ids, and the keys.
+
+    The listing source is one tree per app in a shared layout (``store.listing``): ``locales/<code>/
+    <page>/listing.json`` and ``keywords.json``, ``locales.config.json`` (caps), ``update/apple.md``
+    and ``update/google.md`` (What's New), ``store.json`` (territories, record settings) and
+    ``subscriptions.json``, all under ``appstore_dir``. What differs between apps is a field here.
+    """
+
+    appstore_dir: Path
+    ## App locale code -> the store's own tag ("de" -> "de-DE"). A locale missing from one map is not
+    ## published to that store.
+    apple_locales: dict[str, str]
+    play_locales: dict[str, str]
+    ## Locale code -> the support page Apple requires in every localization.
+    support_url: Callable[[str], str]
+    marketing_url: Callable[[str], str] | None = None
+    apple_bundle_id: str | None = None
+    play_package: str | None = None
+    ## The keys, built by the app from its own config: Apple ``{"key_id", "issuer_id",
+    ## "private_key"}``, Play the service account's JSON as a dict. The engine reads no config.
+    apple_key: Callable[[], dict] | None = None
+    play_key: Callable[[], dict] | None = None
+    ## Listing fields an app requires beyond what the stores need (kcalculate's ``description.sources``).
+    required_fields: tuple[str, ...] = ()
+    ## Play image type -> the screenshot device whose frames fill it. Phone only by default: Play's
+    ## tablet classes are optional, and an app that ships them names the device.
+    play_screenshots: tuple[tuple[str, str], ...] = (("phoneScreenshots", "phone"),)
+    ## App Store screenshot display type -> device. Both sets, as every app here ships on iPad: the
+    ## iPad set is the phone layout on the 2048 × 2732 canvas (``devices.ipad``).
+    apple_screenshots: tuple[tuple[str, str], ...] = (
+        ("APP_IPHONE_65", "phone"),
+        ("APP_IPAD_PRO_3GEN_129", "ipad"),
+    )
+    ## ``(language, page) -> listing dict`` for an app whose pages overlay one another (NutriSpy's
+    ## custom pages); ``None`` reads ``locales/<language>/<page>/listing.json`` as it stands.
+    listing_reader: Callable[[str, str], dict] | None = None
+    ## Whether a locale is published at all (kcalculate parks locales whose search terms are not
+    ## researched yet); ``None`` publishes every locale whose copy is complete.
+    is_listed: Callable[[str], bool] | None = None
+
+
+@dataclass(frozen=True)
 class PrintFiles:
     """A product laid out from one file, with its copy in one JSON file per language: a flyer, a
     roll-up, a profile banner."""
@@ -117,6 +161,7 @@ class AssetProject:
     rollups: PrintFiles | None = None
     banners: PrintFiles | None = None
     logos: LogoFiles | None = None
+    publish: PublishFiles | None = None
 
     def store_files(self) -> StoreFiles:
         return _required(self.store, "store")
@@ -132,6 +177,9 @@ class AssetProject:
 
     def logo_files(self) -> LogoFiles:
         return _required(self.logos, "logos")
+
+    def publish_files(self) -> PublishFiles:
+        return _required(self.publish, "publish")
 
 
 def _required(section, name: str):
@@ -158,4 +206,13 @@ def get_project() -> AssetProject:
     return _PROJECT
 
 
-__all__ = ["AssetProject", "LogoFiles", "PageRegistry", "PrintFiles", "StoreFiles", "get_project", "set_project"]
+__all__ = [
+    "AssetProject",
+    "LogoFiles",
+    "PageRegistry",
+    "PrintFiles",
+    "PublishFiles",
+    "StoreFiles",
+    "get_project",
+    "set_project",
+]

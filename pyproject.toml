@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asset-engine"
-version = "0.7.0"
-description = "Store screenshots, Play feature graphics, App Store creative assets and their upload, print flyers, trade-fair roll-ups, profile banners, app icons and short vertical videos, composed from an app's own definitions"
+version = "0.8.0"
+description = "Store screenshots, Play feature graphics, App Store creative assets, the store listing and subscriptions and their publishing, print flyers, trade-fair roll-ups, profile banners, app icons and short vertical videos, composed from an app's own definitions"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -26,15 +26,16 @@ logos = ["google-genai>=2.0"]
 # Short videos: ffmpeg from the wheel (or PATH) and the speech model for captions. Not pinned exactly:
 # a render depends on the transcript cache it writes, not on the model that filled it.
 video = ["imageio-ffmpeg>=0.5", "faster-whisper>=1.1"]
-# The App Store Connect API (asset_engine.store.connect). The key stays in the app, which hands it
-# over as a callable; uploading changes no render.
-store = ["PyJWT[crypto]>=2.8", "requests>=2.31"]
+# Publishing on the stores: the App Store Connect API (asset_engine.store.connect) and the Google Play
+# Developer API (asset_engine.store.play). The keys stay in the app, which hands them over as
+# callables; publishing changes no render.
+store = ["PyJWT[crypto]>=2.8", "requests>=2.31", "google-auth>=2.30"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-asset_engine = ["rollups/printers.json", "banners/platforms.json", "logos/platforms.json", "store/app_store_creatives.json", "store/app_store_iphone.json", "video/platforms.json"]
+asset_engine = ["rollups/printers.json", "banners/platforms.json", "logos/platforms.json", "store/app_store_creatives.json", "store/app_store_iphone.json", "store/app_store_locales.json", "video/platforms.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

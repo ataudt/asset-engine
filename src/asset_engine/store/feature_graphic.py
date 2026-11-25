@@ -62,8 +62,8 @@ Box = tuple[int, int, int, int]
 ## The file name Play reserves for this asset in an upload tree, and what the metadata builder
 ## copies it to. Play matches the stem against {png,jpg,jpeg}, so the suffix follows the rest of the
 ## frames. Not the *rendered* file's name: that is the project's ``feature_graphic_template``
-## (``ScreenshotConfig.feature_graphic_name``), because the upload tree's name is fastlane's
-## contract and the rendered one is what a person searches the console's asset library for.
+## (``ScreenshotConfig.feature_graphic_name``): the rendered one is what a person searches the
+## console's asset library for.
 PLAY_ASSET_NAME = f"featureGraphic{FRAME_SUFFIX}"
 
 
