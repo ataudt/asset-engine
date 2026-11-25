@@ -323,6 +323,11 @@ def play_listing(language: str, *, images: bool) -> PlayListing:
         if graphic is None:
             raise FramesMissing(f"[{language}] play featureGraphic: not rendered — run `feature-graphic`")
         image_sets["featureGraphic"] = [graphic]
+        icon = publish_files().play_icon
+        if icon is not None:
+            if not icon.is_file():
+                raise FramesMissing(f"[{language}] play icon: {icon} not built — run the logos build")
+            image_sets["icon"] = [icon]
     return PlayListing(
         language=language,
         tag=tag,

@@ -121,6 +121,9 @@ class PublishFiles:
     ## Whether a locale is published at all (kcalculate parks locales whose search terms are not
     ## researched yet); ``None`` publishes every locale whose copy is complete.
     is_listed: Callable[[str], bool] | None = None
+    ## The Play listing's 512 × 512 icon, which Play holds apart from the one in the build: the
+    ## ``play-store`` target of the app's logo config. ``None`` leaves the listing's icon as it is.
+    play_icon: Path | None = None
 
 
 @dataclass(frozen=True)
