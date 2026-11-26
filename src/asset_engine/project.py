@@ -106,11 +106,16 @@ class PublishFiles:
     play_key: Callable[[], dict] | None = None
     ## Listing fields an app requires beyond what the stores need (kcalculate's ``description.sources``).
     required_fields: tuple[str, ...] = ()
-    ## Play image type -> the screenshot device whose frames fill it. Phone only by default: Play's
-    ## tablet classes are optional, and an app that ships them names the device.
-    play_screenshots: tuple[tuple[str, str], ...] = (("phoneScreenshots", "phone"),)
-    ## App Store screenshot display type -> device. Both sets, as every app here ships on iPad: the
-    ## iPad set is the phone layout on the 2048 × 2732 canvas (``devices.ipad``).
+    ## Play image type -> the screenshot device whose frames fill it. Every listing carries phone and
+    ## tablet on both stores, as every app here runs on tablets: the iPad set fills both of Play's
+    ## tablet classes, which Play sizes by pixel bounds alone.
+    play_screenshots: tuple[tuple[str, str], ...] = (
+        ("phoneScreenshots", "phone"),
+        ("tenInchScreenshots", "ipad"),
+        ("sevenInchScreenshots", "ipad"),
+    )
+    ## App Store screenshot display type -> device. The iPad set is the phone layout on the
+    ## 2048 × 2732 canvas (``devices.ipad``).
     apple_screenshots: tuple[tuple[str, str], ...] = (
         ("APP_IPHONE_65", "phone"),
         ("APP_IPAD_PRO_3GEN_129", "ipad"),
