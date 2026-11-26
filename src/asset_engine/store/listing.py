@@ -37,6 +37,10 @@ DEFAULT_PAGE = "default"
 ## Play's limit per image class and Apple's per display type.
 MAX_PLAY_SCREENSHOTS = 8
 MAX_APPLE_SCREENSHOTS = 10
+## The fewest a set may hold: Play publishes no listing with fewer than two phone screenshots, and any
+## other set needs one, since sending an empty set would wipe the live one. How many frames an app's
+## layout defines is no floor: a set goes up with the frames that are rendered.
+MIN_PLAY_PHONE_SCREENSHOTS = 2
 
 ## The description blocks every app's copy carries; ``disclaimer`` and ``sources`` are optional.
 DESCRIPTION_FIELDS = (
@@ -68,7 +72,7 @@ class CapExceeded(RuntimeError):
 
 
 class FramesMissing(RuntimeError):
-    """Images were asked for, and a store image class of a locale is not (fully) rendered."""
+    """Images were asked for, and a store image class of a locale has fewer frames than the store takes."""
 
 
 ## -- the source ---------------------------------------------------------------------------------
@@ -263,22 +267,23 @@ def device_frames(language: str, device: str, page: str = DEFAULT_PAGE) -> list[
     return [frames[caption] for caption in sorted(frames) if frames[caption].is_file()]
 
 
-def _expected_frames(device: str) -> int:
-    return len(load_config(device).slots)
+def _minimum_frames(store: str, image_class: str) -> int:
+    return MIN_PLAY_PHONE_SCREENSHOTS if (store, image_class) == ("play", "phoneScreenshots") else 1
 
 
 def screenshot_sets(
     language: str, classes: tuple[tuple[str, str], ...], *, cap: int, store: str
 ) -> dict[str, list[Path]]:
-    """``{image class: frames}`` for every class an app publishes; raises when one is incomplete."""
+    """``{image class: frames}`` for every class an app publishes, the rendered frames up to the
+    store's cap; raises when one has fewer than the store takes."""
     sets: dict[str, list[Path]] = {}
     for image_class, device in classes:
         frames = device_frames(language, device)
-        expected = min(_expected_frames(device), cap)
-        if len(frames) < expected:
+        minimum = _minimum_frames(store, image_class)
+        if len(frames) < minimum:
             raise FramesMissing(
-                f"[{language}] {store} {image_class}: {len(frames)} of {expected} {device} frame(s) "
-                f"rendered — run the screenshot build for this locale first"
+                f"[{language}] {store} {image_class}: {len(frames)} {device} frame(s) rendered, the "
+                f"store takes at least {minimum} — run the screenshot build for this locale first"
             )
         sets[image_class] = frames[:cap]
     return sets
